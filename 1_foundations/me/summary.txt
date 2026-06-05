@@ -1,2 +1,4 @@
-My name is Ed Donner. I'm an entrepreneur, software engineer and data scientist. I'm originally from London, England, but I moved to NYC in 2000.
-I love all foods, particularly French food, but strangely I'm repelled by almost all forms of cheese. I'm not allergic, I just hate the taste! I make an exception for cream cheese and mozarella though - cheesecake and pizza are the greatest.
+My name is Marcus. I love to develop digital, intelligent and smart products.
+I started as an engineer and an architect, being responsible for products in the field of IoT and smart consumer products.
+During my last years I shifted from being an architect more to being a Product Owner and the focus strongly shoofted into the direction of AI and products in the field of intelligent robotics.
+Intelligent Semantic Worlds, Physical AI and Digital Twins - these are vocabularies you will get my attention with.
