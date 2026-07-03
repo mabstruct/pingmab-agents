@@ -1,9 +1,10 @@
 from crewai import Agent, Crew, Process, Task
 from crewai.project import CrewBase, agent, crew, task
-from crewai_tools import SerperDevTool
+#from crewai_tools import SerperDevTool
+from crewai_tools import TavilySearchTool
 from pydantic import BaseModel, Field
 from typing import List
-from .tools.push_tool import PushNotificationTool
+from .tools.push_tool_telegram import PushNotificationTelegramTool
 from crewai.memory import LongTermMemory, ShortTermMemory, EntityMemory
 from crewai.memory.storage.rag_storage import RAGStorage
 from crewai.memory.storage.ltm_sqlite_storage import LTMSQLiteStorage
@@ -40,17 +41,17 @@ class StockPicker():
     @agent
     def trending_company_finder(self) -> Agent:
         return Agent(config=self.agents_config['trending_company_finder'],
-                     tools=[SerperDevTool()], memory=True)
+                     tools=[TavilySearchTool()], memory=True)
     
     @agent
     def financial_researcher(self) -> Agent:
         return Agent(config=self.agents_config['financial_researcher'], 
-                     tools=[SerperDevTool()])
+                     tools=[TavilySearchTool()])
 
     @agent
     def stock_picker(self) -> Agent:
         return Agent(config=self.agents_config['stock_picker'], 
-                     tools=[PushNotificationTool()], memory=True)
+                     tools=[PushNotificationTelegramTool()], memory=True)
     
     @task
     def find_trending_companies(self) -> Task:
@@ -103,7 +104,7 @@ class StockPicker():
                         embedder_config={
                             "provider": "openai",
                             "config": {
-                                "model": 'text-embedding-3-small'
+                                "model_name": 'text-embedding-3-small'
                             }
                         },
                         type="short_term",
@@ -115,7 +116,7 @@ class StockPicker():
                     embedder_config={
                         "provider": "openai",
                         "config": {
-                            "model": 'text-embedding-3-small'
+                            "model_name": 'text-embedding-3-small'
                         }
                     },
                     type="short_term",
