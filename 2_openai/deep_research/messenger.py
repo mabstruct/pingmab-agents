@@ -1,35 +1,85 @@
 from dotenv import load_dotenv
 import requests
 import os
-import smtplib
-from email.message import EmailMessage
+import boto3
+from botocore.exceptions import ClientError
+import re
+import os
+
 load_dotenv(override=True)
 
-
-EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS")
-EMAIL_SMTP_SERVER = os.getenv("EMAIL_SMTP_SERVER")
-EMAIL_APP_PASSWORD = os.getenv("EMAIL_APP_PASSWORD")
-
-def send_email(subject, text_body, html_body):
-    msg = EmailMessage()
-    msg["From"] = EMAIL_ADDRESS
-    msg["To"] = EMAIL_ADDRESS
-    msg["Subject"] = subject
-    msg.set_content(text_body)
-    msg.add_alternative(html_body, subtype="html")
-
-    with smtplib.SMTP(EMAIL_SMTP_SERVER, 587) as server:
-        server.starttls()
-        server.login(EMAIL_ADDRESS, EMAIL_APP_PASSWORD)
-        server.send_message(msg)
+aws_region = os.getenv("AWS_REGION", "eu-central-1")
+aws_profile = os.getenv("AWS_PROFILE", "default")
+EMAIL_SENDER = os.getenv("SES_FROM_EMAIL")
+EMAIL_RECIPIENT = os.getenv("SES_TO_EMAIL")
 
 
-pushover_user = os.getenv("PUSHOVER_USER")
-pushover_token = os.getenv("PUSHOVER_TOKEN")
-pushover_url = "https://api.pushover.net/1/messages.json"
 
-def push(message):
-    print(f"Push: {message}")
-    payload = {"user": pushover_user, "token": pushover_token, "message": message}
-    requests.post(pushover_url, data=payload)
+def send_email(
+    subject: str,
+    body_html: str,
+    body_text: str = None
+    ) -> str:
 
+    sender = EMAIL_SENDER
+    recipient = EMAIL_RECIPIENT
+    def html_to_basic_text(html: str,) -> str:
+        text = re.sub(r"<br\s*/?>", "\n", html, flags=re.IGNORECASE)
+        text = re.sub(r"</p\s*>", "\n\n", text, flags=re.IGNORECASE)
+        text = re.sub(r"<[^>]+>", "", text)
+        return text.strip()
+    
+    if body_text is None:
+        body_text = html_to_basic_text(body_html)
+
+    ses = boto3.client("ses", os.getenv("AWS_REGION"))
+    response = ses.send_email(
+        Source=EMAIL_SENDER,
+        Destination={
+            "ToAddresses": [os.getenv("SES_TO_EMAIL")],
+        },
+        Message={
+            "Subject": {
+                "Data": subject,
+                "Charset": "UTF-8",
+            },
+            "Body": {
+                "Text": {
+                    "Data": html_to_basic_text(body_html),
+                    "Charset": "UTF-8",
+                },
+                "Html": {
+                    "Data": body_html,
+                    "Charset": "UTF-8",
+                },
+            },
+        },
+    )
+
+    
+def send_test_email():
+    subject = "Test mail from agent-tutorial"
+    body_html = (
+        "Hello,\n\n"
+        "This is test mail from my agent-tutorial.\n\n"
+        "Cheers,\n"
+        "agent-tutorial-bot"
+    )
+    try:
+        message_id = send_email(
+            subject=subject,
+            body_html=body_html
+        )
+    except ClientError as error:
+        print("Failed to send email.")
+        print(error.response["Error"]["Code"])
+        print(error.response["Error"]["Message"])
+        return 1
+
+    print(f"Email sent. Message ID: {message_id}")
+    return 0
+            
+
+
+if __name__ == "__main__":
+    send_test_email()

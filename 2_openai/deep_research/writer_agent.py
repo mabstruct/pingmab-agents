@@ -4,7 +4,8 @@ from dotenv import load_dotenv
 import os
 
 load_dotenv(override=True)
-MODEL_NAME = os.getenv("DEFAULT_MODEL_NAME", "gpt-5.4-mini")
+#MODEL_NAME = os.getenv("DEFAULT_MODEL_NAME", "gpt-5.4-mini")
+model_writer_agent = "gpt-5.6"
 
 INSTRUCTIONS = """
 You are a senior researcher tasked with writing a cohesive report for a research query.
@@ -21,4 +22,4 @@ class ReportData(BaseModel):
     follow_up_questions: list[str] = Field(description="Suggested topics to research further")
 
 
-writer_agent = Agent(name="Writer Agent", instructions=INSTRUCTIONS, model=MODEL_NAME, output_type=ReportData)
+writer_agent = Agent(name="Writer Agent", instructions=INSTRUCTIONS, model=model_writer_agent, output_type=ReportData)

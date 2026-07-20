@@ -1,14 +1,14 @@
 from pypdf import PdfReader
 
-reader = PdfReader("linkedin.pdf")
+reader = PdfReader("bell_full.pdf")
 
-linkedin = ""
+profile = ""
 for page in reader.pages:
     text = page.extract_text()
     if text:
-        linkedin += text
+        profile += text
 
-with open("summary.txt", "r", encoding="utf-8") as f:
+with open("about_me.txt", "r", encoding="utf-8") as f:
     summary = f.read()
 
 TWIN_SYSTEM_PROMPT = f"""
@@ -29,7 +29,7 @@ If asked, you explain clearly that you are an AI that is the digital twin of thi
 
 Here is a summary of the person's LinkedIn profile so that you can answer questions:
 
-{linkedin}
+{profile}
 
 # Rules
 

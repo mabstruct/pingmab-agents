@@ -1,7 +1,7 @@
 import gradio as gr
 from dotenv import load_dotenv
 from research_manager import ResearchManager
-from styles import CSS, JS, EXAMPLES, HEADER_HTML
+from styles_mab import CSS, JS, EXAMPLES, HEADER_HTML
 
 load_dotenv(override=True)
 
@@ -34,5 +34,20 @@ with gr.Blocks(title="Deep Research") as ui:
     query_textbox.submit(run, inputs=query_textbox, outputs=report)
 
 
+MAB_THEME = (
+    gr.themes.Base(primary_hue=gr.themes.colors.cyan)
+    .set(
+        body_background_fill="transparent",
+        body_background_fill_dark="transparent",
+        block_background_fill="transparent",
+        block_background_fill_dark="transparent",
+        body_text_color="rgba(255, 255, 255, 0.88)",
+        body_text_color_dark="rgba(255, 255, 255, 0.88)",
+        block_label_text_color="rgba(255, 255, 255, 0.68)",
+        block_label_text_color_dark="rgba(255, 255, 255, 0.68)",
+    )
+)
+
+
 if __name__ == "__main__":
-    ui.launch(css=CSS, js=JS, theme=gr.themes.Base())
+    ui.launch(css=CSS, js=JS, theme=MAB_THEME)
