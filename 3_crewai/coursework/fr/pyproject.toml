@@ -1,0 +1,25 @@
+[project]
+name = "fr"
+version = "0.1.0"
+description = "fr using crewAI"
+authors = [{ name = "Your Name", email = "you@example.com" }]
+requires-python = ">=3.10,<3.14"
+dependencies = [
+    "crewai[tools]==1.14.4",
+    "tavily-python>=0.7.26",
+]
+
+[project.scripts]
+fr = "fr.main:run"
+run_crew = "fr.main:run"
+train = "fr.main:train"
+replay = "fr.main:replay"
+test = "fr.main:test"
+run_with_trigger = "fr.main:run_with_trigger"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.crewai]
+type = "crew"
