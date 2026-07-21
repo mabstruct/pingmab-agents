@@ -1,0 +1,5 @@
+Private communications can be used to plan terrorism, trafficking, murder, fraud, and child exploitation. When authorities have credible evidence that such crimes are being organized, they must be able—under a court-issued warrant—to access relevant messages. Otherwise, criminals gain a protected digital sanctuary simply because their plans were typed rather than spoken.
+
+This power should be targeted, necessary, time-limited, and independently supervised, with penalties for abuse. That preserves the presumption of privacy while recognizing that privacy cannot become absolute immunity from lawful investigation. Just as police may search a home with judicial authorization, they should be able to search private communications under equally strict safeguards.
+
+The choice is not between total privacy and mass surveillance. It is between accountable, evidence-based access and allowing preventable crimes to proceed despite clear warning signs. Protecting the public is a fundamental duty of government; carefully regulated access to private communications is a necessary tool for fulfilling it.

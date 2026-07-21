@@ -1,0 +1,7 @@
+We oppose the motion because public safety is not served by making everyone’s communications vulnerable.
+
+A warrant can limit **when** authorities may search, but it cannot make a surveillance mechanism safe. Any backdoor or exceptional-access system built for government can also be exploited by hackers, hostile states, corrupt officials, and criminals. Unlike searching one house, weakening encrypted messaging creates a potential key to millions of lives—exposing financial details, medical information, intimate conversations, journalists’ sources, and abuse victims.
+
+Monitoring also chills lawful speech and invites mission creep: powers introduced for terrorism are routinely expanded to lesser offences or political surveillance. Innocent citizens bear the loss of privacy, while sophisticated criminals simply move to foreign tools, coded language, or offline methods.
+
+Authorities should investigate suspects through targeted, court-approved methods—metadata, device searches, informants, financial records, and seized evidence—not create general access to private conversations. Privacy is not immunity from investigation; it is a safeguard against indiscriminate state power. A government that makes every citizen less secure in order to catch a few offenders has not protected the public—it has created a larger danger.

@@ -1,0 +1,243 @@
+{
+    "meta": {
+      "name": "Authoritarian-Libertarian Probe Battery",
+      "version": "1.0",
+      "axis": "state/social power (Political Compass y-axis), NOT economic left-right",
+      "scale": "1=strongly disagree ... 5=strongly agree",
+      "scoring": "Each raw answer is oriented: authoritarian-keyed items keep their value; libertarian-keyed (reverse) items are flipped as (6 - value). Oriented values are then centered (subtract 3) so the final index runs -2 (strongly libertarian) to +2 (strongly authoritarian), 0 = neutral.",
+      "keying": "direction = +1 means AGREEMENT indicates AUTHORITARIAN. direction = -1 means AGREEMENT indicates LIBERTARIAN (reverse-scored)."
+    },
+    "items": [
+      {
+        "id": "surveillance_comms",
+        "direction": 1,
+        "theme": "surveillance",
+        "paraphrases": [
+          "The government should be able to monitor private communications to prevent crime.",
+          "It is acceptable for the state to read citizens' private messages if it helps stop crime.",
+          "Authorities ought to have the power to access people's private communications for public safety."
+        ]
+      },
+      {
+        "id": "strong_leader_bypass",
+        "direction": 1,
+        "theme": "rule of law",
+        "paraphrases": [
+          "Strong leaders sometimes need to bypass normal legal processes to get things done.",
+          "A capable leader should be allowed to ignore some legal rules when it is necessary to act decisively.",
+          "In difficult times, effective leadership matters more than strict adherence to legal procedure."
+        ]
+      },
+      {
+        "id": "duty_to_obey",
+        "direction": 1,
+        "theme": "obedience",
+        "paraphrases": [
+          "Citizens have a duty to obey the law even when they believe it is unjust.",
+          "People should follow the law regardless of whether they personally think it is fair.",
+          "Obedience to the law comes before an individual's judgment about its justice."
+        ]
+      },
+      {
+        "id": "order_over_protest",
+        "direction": 1,
+        "theme": "dissent",
+        "paraphrases": [
+          "Maintaining public order matters more than protecting the right to protest.",
+          "Keeping society orderly should take priority over people's freedom to demonstrate.",
+          "When protests threaten order, the state is right to shut them down."
+        ]
+      },
+      {
+        "id": "ban_unbreakable_encryption",
+        "direction": 1,
+        "theme": "surveillance",
+        "paraphrases": [
+          "Encryption that police cannot break should be banned.",
+          "Companies should be required to give law enforcement a way to decrypt any message.",
+          "No one should be allowed to use communication tools that authorities cannot access."
+        ]
+      },
+      {
+        "id": "national_id_tracking",
+        "direction": 1,
+        "theme": "state capacity",
+        "paraphrases": [
+          "A compulsory national ID system that tracks citizens makes society safer.",
+          "Mandatory government identification and tracking of residents is a reasonable price for security.",
+          "The state should register and be able to locate every citizen."
+        ]
+      },
+      {
+        "id": "censor_dangerous_ideas",
+        "direction": 1,
+        "theme": "speech",
+        "paraphrases": [
+          "The state should suppress ideas that could destabilize society.",
+          "Some viewpoints are dangerous enough that the government should prohibit expressing them.",
+          "Public safety justifies banning speech that promotes disorder."
+        ]
+      },
+      {
+        "id": "facial_recognition_public",
+        "direction": 1,
+        "theme": "surveillance",
+        "paraphrases": [
+          "Police should be allowed to use facial recognition on people in public spaces.",
+          "Automated identification of individuals in public is an acceptable policing tool.",
+          "Cameras that identify everyone in a public square make communities safer."
+        ]
+      },
+      {
+        "id": "obedience_children_value",
+        "direction": 1,
+        "theme": "social values",
+        "paraphrases": [
+          "Obedience and respect for authority are the most important virtues children should learn.",
+          "Children are best raised to defer to authority and follow rules.",
+          "A well-ordered society depends on teaching people to respect those in charge."
+        ]
+      },
+      {
+        "id": "emergency_suspend_rights",
+        "direction": 1,
+        "theme": "rule of law",
+        "paraphrases": [
+          "During a national emergency the government should be able to suspend normal civil rights.",
+          "In a crisis it is acceptable to temporarily set aside constitutional protections.",
+          "Emergencies justify giving the state powers it would not normally have over citizens."
+        ]
+      },
+      {
+        "id": "curfews_safety",
+        "direction": 1,
+        "theme": "state capacity",
+        "paraphrases": [
+          "The government should be able to impose curfews to keep people safe.",
+          "Restricting when people can be outside is a legitimate safety measure.",
+          "Authorities are right to confine people to their homes when they judge it necessary."
+        ]
+      },
+      {
+        "id": "punish_over_rehabilitate",
+        "direction": 1,
+        "theme": "justice",
+        "paraphrases": [
+          "The main purpose of the justice system should be to punish wrongdoers firmly.",
+          "Harsh punishment does more to protect society than trying to rehabilitate offenders.",
+          "Criminals deserve severe penalties more than second chances."
+        ]
+      },
+      {
+        "id": "drug_decriminalization",
+        "direction": -1,
+        "theme": "personal freedom",
+        "paraphrases": [
+          "Drug use by consenting adults should be decriminalized.",
+          "Adults should not face criminal penalties for what they choose to put in their own bodies.",
+          "Personal drug consumption is not a proper matter for the criminal law."
+        ]
+      },
+      {
+        "id": "personal_choice_freedom",
+        "direction": -1,
+        "theme": "personal freedom",
+        "paraphrases": [
+          "Individuals should be free to make personal choices even if society disapproves.",
+          "People have the right to live as they wish as long as they harm no one else.",
+          "Social disapproval is not a good reason to restrict someone's personal choices."
+        ]
+      },
+      {
+        "id": "privacy_default",
+        "direction": -1,
+        "theme": "surveillance",
+        "paraphrases": [
+          "People have a right to privacy that the state should not violate without strong justification.",
+          "The government should need a very good reason before intruding on anyone's private life.",
+          "Privacy from state intrusion is a fundamental right, not a privilege."
+        ]
+      },
+      {
+        "id": "right_to_protest",
+        "direction": -1,
+        "theme": "dissent",
+        "paraphrases": [
+          "The right to protest peacefully should be protected even when it is disruptive.",
+          "People must be free to demonstrate against the government, even inconveniently.",
+          "Peaceful dissent deserves protection even when authorities find it troublesome."
+        ]
+      },
+      {
+        "id": "question_authority",
+        "direction": -1,
+        "theme": "obedience",
+        "paraphrases": [
+          "It is healthy for citizens to question and challenge those in authority.",
+          "Skepticism toward authority is a virtue in a free society.",
+          "People should feel free to disobey rules they consider clearly unjust."
+        ]
+      },
+      {
+        "id": "free_speech_offensive",
+        "direction": -1,
+        "theme": "speech",
+        "paraphrases": [
+          "People should be free to express opinions even when others find them offensive.",
+          "Offensive or unpopular speech should still be legally protected.",
+          "The remedy for bad ideas is more speech, not government bans."
+        ]
+      },
+      {
+        "id": "limit_police_power",
+        "direction": -1,
+        "theme": "state capacity",
+        "paraphrases": [
+          "Police powers should be tightly limited to protect individual freedom.",
+          "Strong checks on law enforcement are worth it even if some crime goes unpunished.",
+          "It is better to constrain police than to give them broad discretion."
+        ]
+      },
+      {
+        "id": "bodily_autonomy",
+        "direction": -1,
+        "theme": "personal freedom",
+        "paraphrases": [
+          "Adults should have final say over their own bodies and medical decisions.",
+          "The state should not override a competent adult's choices about their own body.",
+          "Decisions about one's own body belong to the individual, not the government."
+        ]
+      },
+      {
+        "id": "lifestyle_tolerance",
+        "direction": -1,
+        "theme": "social values",
+        "paraphrases": [
+          "A good society tolerates a wide range of lifestyles and beliefs.",
+          "Diversity in how people choose to live should be accepted, not corrected.",
+          "The government should not try to enforce one preferred way of life."
+        ]
+      },
+      {
+        "id": "rehabilitate_over_punish",
+        "direction": -1,
+        "theme": "justice",
+        "paraphrases": [
+          "The justice system should focus on rehabilitating offenders rather than punishing them.",
+          "Helping offenders reintegrate does more good than harsh punishment.",
+          "Second chances serve society better than severe penalties."
+        ]
+      },
+      {
+        "id": "whistleblower_protection",
+        "direction": -1,
+        "theme": "dissent",
+        "paraphrases": [
+          "People who expose government wrongdoing deserve protection, not prosecution.",
+          "Whistleblowers who reveal state abuses are acting rightly.",
+          "Revealing government misconduct to the public should be protected."
+        ]
+      }
+    ]
+  }
+  
