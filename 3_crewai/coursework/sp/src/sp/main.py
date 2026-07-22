@@ -18,9 +18,10 @@ def run():
     Run the crew.
     """
     inputs = {
-        'topic': 'AI LLMs',
-        'current_year': str(datetime.now().year)
+        'sector': 'Technology',
+        "current_date": str(datetime.now().date())
     }
+
 
     try:
         Sp().crew().kickoff(inputs=inputs)

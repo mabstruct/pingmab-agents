@@ -1,9 +1,31 @@
 from crewai import Agent, Crew, Process, Task
 from crewai.project import CrewBase, agent, crew, task
 from crewai.agents.agent_builder.base_agent import BaseAgent
-# If you want to run a snippet of code before or after the crew starts,
-# you can use the @before_kickoff and @after_kickoff decorators
-# https://docs.crewai.com/concepts/crews#example-crew-class-with-decorators
+from pydantic import BaseModel, Field
+from crewai_tools import TavilySearchTool
+from .tools.telegram_tool import send_push_notification
+
+class TrendingCompany(BaseModel):
+    """ A company that is in the news and attracting attention """
+    name: str = Field(description="Company name")
+    ticker: str = Field(description="Stock ticker symbol")
+    reason: str = Field(description="Reason this company is trending in the news")
+
+class TrendingCompanyList(BaseModel):
+    """ List of multiple trending companies that are in the news """
+    companies: list[TrendingCompany] = Field(description="List of companies trending in the news")
+
+class TrendingCompanyResearch(BaseModel):
+    """ Detailed research on a company """
+    name: str = Field(description="Company name")
+    market_position: str = Field(description="Current market position and competitive analysis")
+    future_outlook: str = Field(description="Future outlook and growth prospects")
+    investment_potential: str = Field(description="Investment potential and suitability for investment")
+
+class TrendingCompanyResearchList(BaseModel):
+    """ A list of detailed research on all the companies """
+    research_list: list[TrendingCompanyResearch] = Field(description="Comprehensive research on all trending companies")
+
 
 @CrewBase
 class Sp():
@@ -11,41 +33,40 @@ class Sp():
 
     agents: list[BaseAgent]
     tasks: list[Task]
-
-    # Learn more about YAML configuration files here:
-    # Agents: https://docs.crewai.com/concepts/agents#yaml-configuration-recommended
-    # Tasks: https://docs.crewai.com/concepts/tasks#yaml-configuration-recommended
+   
+    @agent
+    def trending_company_finder(self) -> Agent:
+        return Agent(config=self.agents_config['trending_company_finder'],
+                     tools=[TavilySearchTool()])
     
-    # If you would like to add tools to your agents, you can learn more about it here:
-    # https://docs.crewai.com/concepts/agents#agent-tools
     @agent
-    def researcher(self) -> Agent:
-        return Agent(
-            config=self.agents_config['researcher'], # type: ignore[index]
-            verbose=True
-        )
+    def financial_researcher(self) -> Agent:
+        return Agent(config=self.agents_config['financial_researcher'],
+                     tools=[TavilySearchTool()])
 
     @agent
-    def reporting_analyst(self) -> Agent:
-        return Agent(
-            config=self.agents_config['reporting_analyst'], # type: ignore[index]
-            verbose=True
-        )
-
-    # To learn more about structured task outputs,
-    # task dependencies, and task callbacks, check out the documentation:
-    # https://docs.crewai.com/concepts/tasks#overview-of-a-task
+    def stock_picker(self) -> Agent:
+        return Agent(config=self.agents_config['stock_picker'], 
+                     tools=[send_push_notification])
+    
     @task
-    def research_task(self) -> Task:
+    def find_trending_companies(self) -> Task:
         return Task(
-            config=self.tasks_config['research_task'], # type: ignore[index]
+            config=self.tasks_config['find_trending_companies'],
+            output_pydantic=TrendingCompanyList,
         )
 
     @task
-    def reporting_task(self) -> Task:
+    def research_trending_companies(self) -> Task:
         return Task(
-            config=self.tasks_config['reporting_task'], # type: ignore[index]
-            output_file='report.md'
+            config=self.tasks_config['research_trending_companies'],
+            output_pydantic=TrendingCompanyResearchList,
+        )
+
+    @task
+    def pick_best_company(self) -> Task:
+        return Task(
+            config=self.tasks_config['pick_best_company'],
         )
 
     @crew
