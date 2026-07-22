@@ -2,8 +2,6 @@
 import sys
 import warnings
 
-from datetime import datetime
-
 from mabstructgamesstudio.crew import Mabstructgamesstudio
 
 warnings.filterwarnings("ignore", category=SyntaxWarning, module="pysbd")
@@ -17,9 +15,10 @@ def run():
     """
     Run the crew.
     """
+    #print("Enter the game title: ")
+    game_title = input("Enter the game title: ")
     inputs = {
-        'topic': 'AI LLMs',
-        'current_year': str(datetime.now().year)
+        'game_title': game_title
     }
 
     try:
@@ -33,8 +32,7 @@ def train():
     Train the crew for a given number of iterations.
     """
     inputs = {
-        "topic": "AI LLMs",
-        'current_year': str(datetime.now().year)
+        "game_title": "Space Miners",
     }
     try:
         Mabstructgamesstudio().crew().train(n_iterations=int(sys.argv[1]), filename=sys.argv[2], inputs=inputs)
@@ -57,8 +55,7 @@ def test():
     Test the crew execution and returns the results.
     """
     inputs = {
-        "topic": "AI LLMs",
-        "current_year": str(datetime.now().year)
+        "game_title": "Space Miners",
     }
 
     try:
@@ -83,8 +80,7 @@ def run_with_trigger():
 
     inputs = {
         "crewai_trigger_payload": trigger_payload,
-        "topic": "",
-        "current_year": ""
+        "game_title": "",
     }
 
     try:

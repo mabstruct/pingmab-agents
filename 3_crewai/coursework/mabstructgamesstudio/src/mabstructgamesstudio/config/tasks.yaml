@@ -1,17 +1,28 @@
-research_task:
+game_ideation_task:
   description: >
-    Conduct a thorough research about {topic}
-    Make sure you find any interesting and relevant information given
-    the current year is {current_year}.
+    Create a new innovative and engaging game idea for a browser game titled: {game_title}
+    You are allowed to use any tools available to you to help you create the game idea.
   expected_output: >
-    A list with 10 bullet points of the most relevant information about {topic}
-  agent: researcher
+    A game concept brief to be given to the game designer. It should include:
+    - Game title
+    - a short idea description in 2 to 3 sentences.
+    - description of the core idea
+    - a list of key features and mechanics
+  agent: game_creative_strategist
+  output_file: output/{game_title}/game_ideation.md
+  markdown: true
 
-reporting_task:
+game_design_task:
   description: >
-    Review the context you got and expand each topic into a full section for a report.
-    Make sure the report is detailed and contains any and all relevant information.
+    Design a browser game titled: {game_title}
+    An ideation document has been provided to you. Use it to help you design the game.
   expected_output: >
-    A fully fledged report with the main topics, each with a full section of information.
-    Formatted as markdown without '```'
-  agent: reporting_analyst
+    A game design document. It should include:
+    - Game title
+    - a short idea description in 2 to 3 sentences.
+    - description of the core idea
+    - breakdown of the game mechanics and features
+    - breakdown of the game art and design
+  agent: game_designer
+  output_file: output/{game_title}/game_design.md
+  markdown: true
