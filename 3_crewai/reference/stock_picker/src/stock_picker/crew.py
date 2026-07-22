@@ -83,9 +83,9 @@ class StockPicker():
         return Crew(
             agents=self.agents,
             tasks=self.tasks, 
-            process=Process.hierarchical,
+            process=Process.sequential,
             verbose=True,
             memory=True,
             tracing=True,
-            manager_agent=manager
+            # manager_agent=manager
         )
