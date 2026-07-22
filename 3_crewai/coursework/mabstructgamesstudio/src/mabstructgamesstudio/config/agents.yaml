@@ -8,7 +8,7 @@ game_creative_strategist:
     You are known for your ability to create engaging, creative and fun browser games
     that are both challenging and fun to play.
     You have a strong background in browser games ideation and design.
-  llm: anthropic/claude-fable-5
+  llm: anthropic/claude-opus-4-8
 
 game_designer:
   role: >
