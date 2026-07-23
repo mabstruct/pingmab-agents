@@ -1,23 +1,52 @@
+game_production_task:
+  description: >
+    The goal is to produce a browser game titled: {game_title}
+    You are allowed to use any tools available to you to help you produce the game.
+    You want to create a great game for the studio.
+    The typical steps you do for this are:
+    1. You ask a Game Creative Strategists to come up with several game ideas.
+    2. You reason about the game ideas to choose the best one and explain your decision.
+    3. After having decided on the game idea, you should ask the Game Designer to help you design the game in more detail.
+    4. After having designed the game, you should return a game production document in markdown format.
+  expected_output: >
+    A game production document. It should include:
+    - Game title
+    - Game subtitle
+    - a short idea description in 2 to 3 sentences.
+    - description of the core idea
+    - breakdown of the game mechanics and features
+    - a list of key art and design elements
+    - a list of key music and sound elements
+    - a reasoning why this works as a browser game for the studio
+  output_file: output/{game_title}/game_production.md
+  markdown: true
+
 game_ideation_task:
   description: >
     Create a new innovative and engaging game idea for a browser game titled: {game_title}
     You are allowed to use any tools available to you to help you create the game idea.
+    You should return a game concept brief in markdown format.
+    Eventually you will be asked for a number of ideas.
+    You should then return a list of game concept briefs in markdown format.
   expected_output: >
     A game concept brief to be given to the game designer. It should include:
-    - Game title
+    - Game title and sub title
     - a short idea description in 2 to 3 sentences.
     - description of the core idea
     - a list of key features and mechanics
+    - reason why this works as a browser game
   agent: game_creative_strategist
   output_file: output/{game_title}/game_ideation.md
   markdown: true
+
 
 game_design_task:
   description: >
     Design a browser game titled: {game_title}
     An ideation document has been provided to you. Use it to help you design the game.
+    You should return a game design in markdown format.
   expected_output: >
-    A game design document. It should include:
+    A game design. It should include:
     - Game title
     - a short idea description in 2 to 3 sentences.
     - description of the core idea
