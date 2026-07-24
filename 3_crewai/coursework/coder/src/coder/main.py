@@ -13,13 +13,15 @@ warnings.filterwarnings("ignore", category=SyntaxWarning, module="pysbd")
 # Replace with inputs you want to test with, it will automatically
 # interpolate any tasks and agents information
 
+assignment = 'Write a python program to calculate the first 1,000,000 terms \
+    of this series, multiplying the total by 4: 1 - 1/3 + 1/5 - 1/7 + ...'
+
 def run():
     """
     Run the crew.
     """
     inputs = {
-        'topic': 'AI LLMs',
-        'current_year': str(datetime.now().year)
+        'assignment': assignment
     }
 
     try:
