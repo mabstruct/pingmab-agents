@@ -1,0 +1,198 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>The Big Swallow — Sound Eater</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    background: #000; overflow: hidden;
+    font-family: 'Courier New', monospace;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: none;
+  }
+  #game { display: block; position: absolute; top: 0; left: 0; }
+
+  .overlay {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: #bfe9ff; text-align: center; z-index: 10;
+    background: radial-gradient(ellipse at center, rgba(4,10,18,0.7) 0%, rgba(0,0,0,0.95) 100%);
+    padding: 20px; box-sizing: border-box;
+  }
+  .overlay.hidden { display: none; }
+  h1 {
+    font-size: clamp(28px, 7vw, 56px); margin: 0 0 8px; letter-spacing: 3px;
+    color: #ffd9a0; text-shadow: 0 0 24px rgba(255,180,90,0.6);
+    font-weight: normal;
+  }
+  h2 { font-size: clamp(14px, 3.5vw, 22px); margin: 0 0 26px; color: #7fd0ff; letter-spacing: 2px; opacity: 0.9;}
+  p { max-width: 560px; line-height: 1.6; font-size: clamp(13px, 3vw, 16px); color: #9fc4dd; }
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; margin: 18px 0; }
+  .legend div { font-size: clamp(11px, 2.8vw, 14px); }
+  .dot { display:inline-block; width:11px; height:11px; border-radius:50%; margin-right:6px; vertical-align:middle;}
+  .btn {
+    margin-top: 22px; padding: 14px 40px; font-family: inherit; font-size: 18px;
+    letter-spacing: 2px; color: #001018; background: #7fd0ff; border: none; border-radius: 40px;
+    cursor: pointer; box-shadow: 0 0 30px rgba(127,208,255,0.5); transition: transform .1s;
+  }
+  .btn:active { transform: scale(0.96); }
+  .small { font-size: 12px; color: #567; margin-top: 20px; }
+
+  #hud {
+    position: absolute; top: 0; left: 0; width: 100%;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding: 12px 16px; box-sizing: border-box; color: #cfe8ff;
+    font-size: clamp(11px, 2.6vw, 15px); pointer-events: none; z-index: 5;
+    text-shadow: 0 0 8px rgba(0,0,0,0.9);
+  }
+  #hud .col { display: flex; flex-direction: column; gap: 3px; }
+  #hud .col.right { align-items: flex-end; }
+  #barWrap { width: min(38vw, 220px); height: 8px; background: rgba(255,255,255,0.12); border-radius: 6px; margin-top: 4px; overflow: hidden;}
+  #barFill { height: 100%; width: 0%; background: linear-gradient(90deg,#7fd0ff,#ffd9a0); border-radius: 6px; transition: width .2s; }
+  #muteBtn {
+    pointer-events: auto; cursor: pointer; background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.2); color: #cfe8ff; border-radius: 20px;
+    padding: 4px 12px; font-family: inherit; font-size: 12px; margin-top: 4px;
+  }
+  .phase { color: #ffd9a0; letter-spacing: 2px; }
+  #resultStats { margin: 16px 0; line-height: 1.9; font-size: clamp(14px,3.2vw,18px); }
+  #resultStats b { color: #ffd9a0; }
+  #bonusLine { color: #7fff9f; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <div class="col">
+    <div>MASS <span id="hudMass">0</span> / <span id="hudQuota">0</span></div>
+    <div id="barWrap"><div id="barFill"></div></div>
+    <div class="phase" id="hudPhase">—</div>
+  </div>
+  <div class="col right">
+    <div>SCORE <span id="hudScore">0</span></div>
+    <div>TIME <span id="hudTime">0:00</span></div>
+    <div id="hudCombo"></div>
+    <button id="muteBtn">♪ SOUND: ON</button>
+  </div>
+</div>
+
+<!-- TITLE SCREEN -->
+<div class="overlay" id="titleScreen">
+  <h1>THE BIG SWALLOW</h1>
+  <h2>· SOUND EATER ·</h2>
+  <p>You are a hungry mouth adrift in a near-black void. You cannot see — you can only <b style="color:#ffd9a0">hear the light</b>. Everything pulses, casting ripples that briefly reveal the dark.</p>
+  <p><b style="color:#7fd0ff">Eat only what is lit.</b> Each swallow silences that source forever — you grow, but the world goes darker. Seeing and eating are opposed.</p>
+  <div class="legend">
+    <div><span class="dot" style="background:#66c8ff"></span>PREY — dim, plentiful, safe food</div>
+    <div><span class="dot" style="background:#ffb060"></span>BEACON — loud, huge mass, big darkness</div>
+    <div><span class="dot" style="background:#e8f0ff"></span>CHIME — darting lamp, lights your path</div>
+  </div>
+  <p class="small">DRAG or POINT to steer the mouth. Swallowing is automatic when you touch a lit source. Survive The Hush.</p>
+  <button class="btn" id="startBtn">DRIFT IN</button>
+</div>
+
+<!-- END SCREEN / SILENCE MAP -->
+<div class="overlay hidden" id="endScreen">
+  <h1 id="endTitle">THE SILENCE MAP</h1>
+  <h2 id="endSub">Your run, made constellation</h2>
+  <div id="resultStats">
+    Final Score <b id="finalScore">0</b><br>
+    Mass Devoured <b id="finalMass">0</b><br>
+    <span id="bonusLine">Kept the Lights On +<span id="finalBonus">0</span></span>
+  </div>
+  <button class="btn" id="restartBtn">DRIFT AGAIN</button>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   THE BIG SWALLOW — SOUND EATER
+   Single-file Canvas 2D game. Sound made visible.
+   ============================================================ */
+
+// ---------- Canvas / DPI ----------
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+// Offscreen "light buffer" for additive glow compositing
+const lightCanvas = document.createElement('canvas');
+const lctx = lightCanvas.getContext('2d');
+
+let DPR = Math.min(window.devicePixelRatio || 1, 2);
+let W = 0, H = 0; // CSS pixels (logical)
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = W * DPR; canvas.height = H * DPR;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  lightCanvas.width = W * DPR; lightCanvas.height = H * DPR;
+  lctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ---------- Utility ----------
+const rand = (a, b) => a + Math.random() * (b - a);
+const randi = (a, b) => Math.floor(rand(a, b + 1));
+const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+const lerp = (a, b, t) => a + (b - a) * t;
+const dist2 = (ax, ay, bx, by) => { const dx = ax - bx, dy = ay - by; return dx * dx + dy * dy; };
+const TAU = Math.PI * 2;
+
+// ---------- Audio (optional enhancement) ----------
+const Audio = {
+  ctx: null, master: null, droneGain: null, enabled: true, started: false,
+  init() {
+    if (this.started) return;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      this.ctx = new AC();
+      this.master = this.ctx.createGain();
+      this.master.gain.value = 0.5;
+      this.master.connect(this.ctx.destination);
+      // low sustained void drone
+      const drone = this.ctx.createOscillator();
+      drone.type = 'sine'; drone.frequency.value = 46;
+      const drone2 = this.ctx.createOscillator();
+      drone2.type = 'sine'; drone2.frequency.value = 57;
+      this.droneGain = this.ctx.createGain();
+      this.droneGain.gain.value = 0.14;
+      drone.connect(this.droneGain); drone2.connect(this.droneGain);
+      this.droneGain.connect(this.master);
+      drone.start(); drone2.start();
+      this.started = true;
+    } catch (e) { this.enabled = false; }
+  },
+  resume() { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); },
+  // beacon rhythmic pulse
+  beacon(freq) {
+    if (!this.enabled || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = freq || 110;
+    const g = this.ctx.createGain(); g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.16, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+    o.connect(g); g.connect(this.master); o.start(t); o.stop(t + 0.55);
+  },
+  prey() {
+    if (!this.enabled || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator(); o.type = 'sine'; o.frequency.value = 520 + Math.random()*200;
+    const g = this.ctx.createGain(); g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.04, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.25);
+    o.connect(g); g.connect(this.master); o.start(t); o.stop(t + 0.3);
+  },
+  // wet swallow click — the sound being cut off
+  swallow() {
+    if (!this.enabled || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator(); o.type = 'sawtooth';
