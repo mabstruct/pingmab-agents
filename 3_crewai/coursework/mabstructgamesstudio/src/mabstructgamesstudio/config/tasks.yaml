@@ -8,16 +8,12 @@ game_production_task:
     2. You reason about the game ideas to choose the best one and explain your decision.
     3. After having decided on the game idea, you should ask the Game Designer to help you design the game in more detail.
     4. After having designed the game, you should return a game production document in markdown format.
+    5. After having produced the game, you should ask the Game Developer to help you develop the game.
+    6. After having developed the game, you should ask the Game Tester to help you test the game.
+    7. Optional: After having tested the game, depending on the test output. you can decided to give it back to the GameDeveloper for refinements.
+    8. After having refined the game, you should ask the Game Deployer to help you deploy the game.
   expected_output: >
-    A game production document. It should include:
-    - Game title
-    - Game subtitle
-    - a short idea description in 2 to 3 sentences.
-    - description of the core idea
-    - breakdown of the game mechanics and features
-    - a list of key art and design elements
-    - a list of key music and sound elements
-    - a reasoning why this works as a browser game for the studio
+    A new browser game titled: {game_title} has been produced and been deployed.
   output_file: output/{game_title}/game_production.md
   markdown: true
 
@@ -34,7 +30,10 @@ game_ideation_task:
     - a short idea description in 2 to 3 sentences.
     - description of the core idea
     - a list of key features and mechanics
+    - breakdown of the game mechanics and features
     - reason why this works as a browser game
+    - a list of key music and sound elements
+    - a reasoning why this works as a browser game for the studio
   agent: game_creative_strategist
   output_file: output/{game_title}/game_ideation.md
   markdown: true
@@ -54,4 +53,53 @@ game_design_task:
     - breakdown of the game art and design
   agent: game_designer
   output_file: output/{game_title}/game_design.md
+  context:
+    - game_ideation_task
   markdown: true
+
+
+game_development_task:
+  description: >
+    Develop a browser game titled: {game_title}
+    A game design has been provided to you. Use it to help you develop the game.
+    You should return a game development document in markdown format.
+  expected_output: >
+    a playable html browser game.
+  agent: game_developer
+  output_file: output/{game_title}/index.html
+  markdown: false
+  context:
+    - game_design_task
+
+game_testing_task:
+  description: >
+    Test a browser game titled: {game_title}
+    A playable html browser game was developed. Test it and report on any bugs and issues found.  
+    You should return a game testing document in markdown format.
+  expected_output: >
+    a report on the game testing. It should include:
+    - a list of bugs and issues found
+  agent: game_tester
+  output_file: output/{game_title}/game_testing.md
+  markdown: true
+  context:
+    - game_development_task
+
+game_deployment_task:
+  description: >
+    Deploy the browser game titled: {game_title} to a temporary here.now site for playtesting.
+    The game artifact is the HTML file written during development at output/{game_title}/game_development.html.
+    First use the Deploy to here.now tool with that path and pass the game title.
+    Then use the Send Telegram Message tool to notify the studio lead that the game is ready for testing,
+    including the live here.now URL and whether the site is temporary.
+  expected_output: >
+    A game deployment report in markdown. It should include:
+    - the live here.now URL
+    - whether the site is temporary (24h) or permanent
+    - confirmation that a Telegram message was sent
+    - the claim URL if the site is anonymous
+  agent: game_deployer
+  output_file: output/{game_title}/game_deployment.md
+  markdown: true
+  context:
+    - game_development_task

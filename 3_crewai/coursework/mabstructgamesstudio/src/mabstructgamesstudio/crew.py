@@ -1,8 +1,11 @@
-from crewai import Agent, Crew, Process, Task
+from crewai import Agent, Crew, LLM, Process, Task
 from crewai.project import CrewBase, agent, crew, task
 from crewai.agents.agent_builder.base_agent import BaseAgent
 from crewai_tools import TavilySearchTool
 from pydantic import BaseModel, Field
+
+from .tools.here_now_tool import deploy_to_here_now
+from .tools.telegram_tool import send_telegram_message
 
 
 class GameConceptBrief(BaseModel):
@@ -61,6 +64,32 @@ class Mabstructgamesstudio():
             allow_delegation=False,
         )
 
+    @agent
+    def game_developer(self) -> Agent:
+        return Agent(
+            config=self.agents_config['game_developer'], # type: ignore[index]
+            llm=LLM(model="anthropic/claude-fable-5", max_tokens=50000, timeout=600),
+            verbose=True,
+            allow_delegation=False,
+        )
+
+    @agent
+    def game_tester(self) -> Agent:
+        return Agent(
+            config=self.agents_config['game_tester'], # type: ignore[index]
+            verbose=True,
+            allow_delegation=False,
+        )
+
+    @agent
+    def game_deployer(self) -> Agent:
+        return Agent(
+            config=self.agents_config['game_deployer'], # type: ignore[index]
+            verbose=True,
+            allow_delegation=False,
+            tools=[deploy_to_here_now, send_telegram_message],
+        )
+
     @task
     def game_production_task(self) -> Task:
         return Task(
@@ -81,11 +110,35 @@ class Mabstructgamesstudio():
             # output_pydantic=GameDesign,
         )
 
+    @task
+    def game_development_task(self) -> Task:
+        return Task(
+            config=self.tasks_config['game_development_task'], # type: ignore[index]
+        )
+
+    @task
+    def game_testing_task(self) -> Task:
+        return Task(
+            config=self.tasks_config['game_testing_task'], # type: ignore[index]
+        )
+
+    @task
+    def game_deployment_task(self) -> Task:
+        return Task(
+            config=self.tasks_config['game_deployment_task'], # type: ignore[index]
+        )
+   
     @crew
     def crew(self) -> Crew:
         """Creates the Mabstructgamesstudio crew"""
         return Crew(
-            agents=[self.game_creative_strategist(), self.game_designer()],
+            agents=[
+                self.game_creative_strategist(),
+                self.game_designer(),
+                self.game_developer(),
+                self.game_tester(),
+                self.game_deployer(),
+            ],
             tasks=self.tasks,
             process=Process.hierarchical,
             manager_agent=self.game_producer(),
