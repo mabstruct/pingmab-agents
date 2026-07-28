@@ -1,19 +1,11 @@
 game_production_task:
   description: >
-    The goal is to produce a browser game titled: {game_title}
-    You are allowed to use any tools available to you to help you produce the game.
-    You want to create a great game for the studio.
-    The typical steps you do for this are:
-    1. You ask a Game Creative Strategists to come up with several game ideas.
-    2. You reason about the game ideas to choose the best one and explain your decision.
-    3. After having decided on the game idea, you should ask the Game Designer to help you design the game in more detail.
-    4. After having designed the game, you should return a game production document in markdown format.
-    5. After having produced the game, you should ask the Game Developer to help you develop the game.
-    6. After having developed the game, you should ask the Game Tester to help you test the game.
-    7. Optional: After having tested the game, depending on the test output. you can decided to give it back to the GameDeveloper for refinements.
-    8. After having refined the game, you should ask the Game Deployer to help you deploy the game.
+    Write the final production report for the browser game titled: {game_title}.
+    Review the ideation, design, development, testing, and deployment outputs from prior tasks.
+    Summarize what was produced, the live playtest URL if deployed, and the final ship status.
   expected_output: >
     A new browser game titled: {game_title} has been produced and been deployed.
+  agent: game_producer
   output_file: output/{game_title}/game_production.md
   markdown: true
 
@@ -62,19 +54,30 @@ game_development_task:
   description: >
     Develop a browser game titled: {game_title}
     A game design has been provided to you. Use it to help you develop the game.
-    You should return a game development document in markdown format.
+    Build a complete, playable single-file HTML5 Canvas game (inline CSS + vanilla JS).
+    IMPORTANT: Do NOT paste HTML in your final answer — it will be truncated.
+    Save the game ONLY with the Write game HTML tool (game_title is automatic).
+    Write in 4-6 small chunks (each under 6000 characters):
+    (1) mode=overwrite: <!DOCTYPE html> through core init/state,
+    (2+) mode=append: level gen, physics, rendering, input, main loop,
+    (last) mode=append: closing </script></body></html>.
+    If a write is rejected for empty/oversized content, split smaller — never call the tool with no arguments.
+    After all chunks, call Verify game HTML once. If incomplete, rewrite from scratch with overwrite.
+    Your final answer must be a short confirmation only (path, byte size, verification status).
+    Do NOT overwrite index.html — that file is written exclusively by the tool.
   expected_output: >
-    a playable html browser game.
+    Short confirmation that output/{game_title}/index.html was written and Verify game HTML reports complete.
   agent: game_developer
-  output_file: output/{game_title}/index.html
-  markdown: false
+  output_file: output/{game_title}/game_development.md
+  markdown: true
   context:
     - game_design_task
 
 game_testing_task:
   description: >
     Test a browser game titled: {game_title}
-    A playable html browser game was developed. Test it and report on any bugs and issues found.  
+    A playable html browser game was developed. Test it and report on any bugs and issues found. 
+    The browser game is in the output/{game_title} directory as index.html
     You should return a game testing document in markdown format.
   expected_output: >
     a report on the game testing. It should include:
@@ -88,8 +91,9 @@ game_testing_task:
 game_deployment_task:
   description: >
     Deploy the browser game titled: {game_title} to a temporary here.now site for playtesting.
-    The game artifact is the HTML file written during development at output/{game_title}/game_development.html.
-    First use the Deploy to here.now tool with that path and pass the game title.
+    The game artifact is the HTML file at output/{game_title}/index.html.
+    First use the Deploy to here.now tool with that exact HTML file path (not a folder or project root)
+    and pass the game title.
     Then use the Send Telegram Message tool to notify the studio lead that the game is ready for testing,
     including the live here.now URL and whether the site is temporary.
   expected_output: >

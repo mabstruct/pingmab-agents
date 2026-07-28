@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Big Swallow: Singularity</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #05060a;
+    overflow: hidden;
+    font-family: 'Trebuchet MS', 'Segoe UI', sans-serif;
+    color: #dfe9ff;
+    user-select: none;
+  }
+  #wrap { position: fixed; inset: 0; }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  #hud {
+    position: fixed; top: 0; left: 0; right: 0;
+    padding: 12px 16px;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    pointer-events: none;
+    text-shadow: 0 0 8px rgba(0,0,0,0.9);
+    z-index: 5;
+  }
+  #hud .panel {
+    background: rgba(10,14,26,0.45);
+    border: 1px solid rgba(120,160,255,0.25);
+    border-radius: 8px;
+    padding: 8px 12px;
+    backdrop-filter: blur(3px);
+  }
+  #massLabel { font-size: 22px; font-weight: bold; letter-spacing: 0.5px; }
+  #massSub { font-size: 12px; opacity: 0.75; }
+  #barOuter {
+    margin-top: 6px; width: 220px; height: 10px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 6px; overflow: hidden;
+    border: 1px solid rgba(120,160,255,0.3);
+  }
+  #barInner {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg,#4af0ff,#8a6bff,#ff5ce0);
+    transition: width 0.15s ease;
+  }
+  #rightPanel { text-align: right; }
+  #stageLabel { font-size: 16px; font-weight: bold; color: #a9c6ff; }
+  #tip { font-size: 12px; opacity: 0.7; margin-top: 4px; }
+
+  #pulseUI {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 10px;
+    pointer-events: none; z-index: 5;
+  }
+  #pulseBox {
+    width: 190px; height: 12px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(0,240,255,0.4);
+    border-radius: 7px; overflow: hidden;
+  }
+  #pulseFill { height: 100%; width: 0%; background: linear-gradient(90deg,#00f0ff,#7dffff); }
+  #pulseText { font-size: 12px; opacity: 0.85; min-width: 130px; }
+
+  .overlay {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center;
+    background: radial-gradient(circle at 50% 40%, rgba(30,20,60,0.85), rgba(3,4,8,0.96));
+    z-index: 20;
+    padding: 20px;
+  }
+  .overlay h1 {
+    font-size: clamp(28px, 6vw, 58px);
+    letter-spacing: 2px;
+    background: linear-gradient(90deg,#4af0ff,#8a6bff,#ff5ce0);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 10px;
+  }
+  .overlay h2 { font-size: clamp(20px,4vw,34px); margin-bottom: 14px; }
+  .overlay p { max-width: 560px; line-height: 1.5; opacity: 0.9; margin-bottom: 8px; font-size: 15px; }
+  .overlay .small { font-size: 13px; opacity: 0.6; }
+  .btn {
+    margin-top: 22px;
+    pointer-events: auto;
+    cursor: pointer;
+    padding: 14px 34px;
+    font-size: 18px; font-weight: bold; letter-spacing: 1px;
+    color: #05060a;
+    background: linear-gradient(90deg,#4af0ff,#8a6bff);
+    border: none; border-radius: 30px;
+    box-shadow: 0 0 24px rgba(120,140,255,0.5);
+    transition: transform 0.1s ease, box-shadow 0.2s ease;
+  }
+  .btn:hover { transform: scale(1.05); box-shadow: 0 0 34px rgba(140,160,255,0.8); }
+  .hidden { display: none !important; }
+  #dangerVignette {
+    position: fixed; inset: 0; pointer-events: none; z-index: 4;
+    box-shadow: inset 0 0 160px 40px rgba(255,40,60,0.0);
+    transition: box-shadow 0.18s ease;
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game"></canvas>
+</div>
+
+<div id="dangerVignette"></div>
+
+<div id="hud" class="hidden">
+  <div class="panel">
+    <div id="massLabel">Mass: 0</div>
+    <div id="massSub">Feed on smaller matter</div>
+    <div id="barOuter"><div id="barInner"></div></div>
+  </div>
+  <div class="panel" id="rightPanel">
+    <div id="stageLabel">Stage: Protostar Seed</div>
+    <div id="tip">Move: mouse / WASD &nbsp;·&nbsp; Pulse: click / Space</div>
+  </div>
+</div>
+
+<div id="pulseUI" class="hidden">
+  <div id="pulseText">Gravity Pulse</div>
+  <div id="pulseBox"><div id="pulseFill"></div></div>
+</div>
+
+<div id="startScreen" class="overlay">
+  <h1>THE BIG SWALLOW</h1>
+  <h2>: Singularity</h2>
+  <p>You are a newborn singularity adrift in a cluttered cosmos. Drift over debris, asteroids, moons and dying stars <b>smaller</b> than you to devour them and grow.</p>
+  <p>Avoid anything <b>larger</b> — it will tear you apart. When cornered, fire a <b>Gravity Pulse</b> to shove big threats away and pull loose matter toward you.</p>
+  <p class="small">Move with the mouse or WASD. Fire the pulse with click or Space. Consume the galactic core to win.</p>
+  <button class="btn" id="startBtn">BEGIN COLLAPSE</button>
+</div>
+
+<div id="endScreen" class="overlay hidden">
+  <h1 id="endTitle">SINGULARITY</h1>
+  <p id="endMsg"></p>
+  <p class="small" id="endStats"></p>
+  <button class="btn" id="restartBtn">COLLAPSE AGAIN</button>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+let W = 0, H = 0, DPR = 1;
+function resize(){
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = Math.floor(W * DPR);
+  canvas.height = Math.floor(H * DPR);
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ---------- Config ----------
+const WORLD = { w: 4200, h: 4200 };
+const WIN_MASS = 5200;
+const STAGES = [
+  { m: 0,    name: 'Protostar Seed' },
+  { m: 60,   name: 'Micro Black Hole' },
+  { m: 180,  name: 'Stellar Devourer' },
+  { m: 520,  name: 'Neutron Reaper' },
+  { m: 1200, name: 'Void Leviathan' },
+  { m: 2600, name: 'Galactic Terror' },
+  { m: 4600, name: 'Cosmic Singularity' }
+];
+
+// UI refs
+const hud = document.getElementById('hud');
+const pulseUI = document.getElementById('pulseUI');
+const massLabel = document.getElementById('massLabel');
+const massSub = document.getElementById('massSub');
+const barInner = document.getElementById('barInner');
+const stageLabel = document.getElementById('stageLabel');
+const pulseFill = document.getElementById('pulseFill');
+const pulseText = document.getElementById('pulseText');
+const startScreen = document.getElementById('startScreen');
+const endScreen = document.getElementById('endScreen');
+const startBtn = document.getElementById('startBtn');
+const restartBtn = document.getElementById('restartBtn');
+const endTitle = document.getElementById('endTitle');
+const endMsg = document.getElementById('endMsg');
+const endStats = document.getElementById('endStats');
+const dangerVignette = document.getElementById('dangerVignette');
+
+// ---------- State ----------
+let running = false;
+let bodies = [];
+let particles = [];
+let streaks = [];   // spaghettification streaks
+let pulseRings = []; // visible pulse rings
+let stars = [];
+let player = null;
+let cam = { x:0, y:0 };
+let mouse = { x: W/2, y: H/2, active:false };
+let keys = {};
+let pulseCharge = 1; // 0..1
+const PULSE_RECHARGE = 0.28; // per second
+let elapsed = 0;
+let devoured = 0;
+let dangerActive = false; // hysteresis state
+
+// ---------- Utility ----------
+function rand(a,b){ return a + Math.random()*(b-a); }
+function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+function massToRadius(m){ return 8 + Math.pow(m, 0.5) * 1.55; }
+function dist2(ax,ay,bx,by){ const dx=ax-bx, dy=ay-by; return dx*dx+dy*dy; }
+
+// caps that scale down at high mass for performance
+function particleCap(){
+  const m = player ? player.mass : 0;
+  if (m > 2600) return 260;
+  if (m > 1200) return 360;
+  return 520;
+}
+function streakCap(){
+  const m = player ? player.mass : 0;
+  if (m > 2600) return 40;
+  if (m > 1200) return 70;
+  return 120;
+}
+
+const BODY_COLORS = [
+  ['#8fd0ff','#3a7bd5'], // ice
+  ['#ffd59a','#c9702a'], // rock
+  ['#ffb3f0','#a13ea8'], // gas
+  ['#c9ffd6','#2fae63'], // organic
+  ['#fff3a8','#d9a021'], // star
+  ['#c0c8ff','#5a63b8']  // metal
+];
+
+function makeBody(x,y,mass,type){
+  const c = BODY_COLORS[type % BODY_COLORS.length];
+  return {
+    x, y, mass,
+    vx: rand(-14,14), vy: rand(-14,14),
+    r: massToRadius(mass),
+    c1: c[0], c2: c[1],
+    spin: rand(-1,1),
+    ang: rand(0, Math.PI*2),
+    type
+  };
+}
+
+// ---------- Init ----------
+function initGame(){
+  bodies = [];
+  particles = [];
+  streaks = [];
+  pulseRings = [];
+  pulseCharge = 1;
+  elapsed = 0;
+  devoured = 0;
+  dangerActive = false;
+
+  player = {
+    x: WORLD.w/2, y: WORLD.h/2,
+    vx:0, vy:0, mass: 22, r: massToRadius(22),
+    accretion: 0
+  };
+
+  // background stars (parallax) in screen-ish world space
+  stars = [];
+  for (let i=0;i<420;i++){
+    stars.push({
+      x: rand(0,WORLD.w), y: rand(0,WORLD.h),
+      z: rand(0.2,1), s: rand(0.4,1.8)
+    });
+  }
+
+  // scatter bodies: many small, few large
+  for (let i=0;i<170;i++){
+    const roll = Math.random();
+    let mass;
+    if (roll < 0.55) mass = rand(2, 16);
+    else if (roll < 0.82) mass = rand(16, 55);
+    else if (roll < 0.95) mass = rand(55, 240);
+    else mass = rand(240, 900);
+    let x,y, tries=0;
+    do {
+      x = rand(120, WORLD.w-120);
+      y = rand(120, WORLD.h-120);
+      tries++;
+    } while (dist2(x,y,player.x,player.y) < 360*360 && tries < 30);
+    bodies.push(makeBody(x,y,mass, Math.floor(rand(0,6))));
+  }
+
+  // The galactic core (win target) — very heavy, placed far away
+  const core = makeBody(rand(300,WORLD.w-300), rand(300,WORLD.h-300), 4200, 4);
+  core.isCore = true;
+  core.vx *= 0.15; core.vy *= 0.15;
+  bodies.push(core);
+
+  cam.x = player.x; cam.y = player.y;
+}
+
+// ---------- Spawning to keep world alive ----------
+function maybeSpawn(){
+  // keep a healthy population; scale spawn with player size a bit
+  const target = 150;
+  if (bodies.length < target && Math.random() < 0.4){
+    // spawn near the edge of the visible feeding zone relative to player mass
+    const ang = rand(0, Math.PI*2);
+    const d = rand(700, 1400);
+    let x = player.x + Math.cos(ang)*d;
+    let y = player.y + Math.sin(ang)*d;
+    x = clamp(x, 60, WORLD.w-60);
+    y = clamp(y, 60, WORLD.h-60);
+    const roll = Math.random();
+    let mass;
+    // bias to a spread relative to player so game stays interesting
+    if (roll < 0.5) mass = rand(2, player.mass*0.5 + 8);
+    else if (roll < 0.85) mass = rand(player.mass*0.4+8, player.mass*1.1+30);
+    else mass = rand(player.mass*1.1+30, player.mass*2.2+120);
+    mass = clamp(mass, 2, 3000);
+    bodies.push(makeBody(x,y,mass, Math.floor(rand(0,6))));
+  }
+}
+
+// ---------- Particles ----------
+function spawnParticles(x,y,color,count,speed){
+  const cap = particleCap();
+  count = Math.min(count, Math.max(0, cap - particles.length));
+  for (let i=0;i<count;i++){
+    const a = rand(0,Math.PI*2);
+    const s = rand(speed*0.3, speed);
+    particles.push({
+      x,y,
+      vx: Math.cos(a)*s, vy: Math.sin(a)*s,
+      life: rand(0.4,1.0), max: 1.0,
+      col: color, r: rand(1,3.2)
+    });
+  }
+  // hard cap
+  if (particles.length > cap) particles.splice(0, particles.length - cap);
+}
+
+function spawnStreak(x,y,tx,ty,color){
+  if (streaks.length >= streakCap()) return;
+  streaks.push({
+    x,y, tx,ty, life: 0.5, max:0.5, col: color, w: rand(1.5,3.5)
+  });
+}
+
+// ---------- Pulse ----------
+function firePulse(){
+  if (!running) return;
+  if (pulseCharge < 0.999) return;
+  pulseCharge = 0;
+
+  const strength = 520 + player.mass * 0.9;
+  const radius = 260 + player.r * 4 + Math.min(player.mass*0.25, 260);
+
+  // Visible expanding pulse ring (bright cyan/white) so it stands out from lensing
+  pulseRings.push({
+    x: player.x, y: player.y,
+    r: player.r + 6,
+    maxR: radius * 1.15,
+    life: 0.55, max: 0.55
+  });
+
+  for (const b of bodies){
+    const dx = b.x - player.x, dy = b.y - player.y;
+    const d = Math.hypot(dx,dy) || 1;
+    if (d > radius) continue;
+    const nx = dx/d, ny = dy/d;
+    const falloff = 1 - d/radius;
+    if (b.mass > player.mass){
+      // push big threats away
+      const push = strength * falloff * 1.4 / Math.sqrt(b.mass);
+      b.vx += nx * push;
+      b.vy += ny * push;
+    } else {
+      // pull loose matter toward the singularity
+      const pull = strength * falloff * 1.1 / Math.sqrt(b.mass+2);
+      b.vx -= nx * pull;
+      b.vy -= ny * pull;
+    }
+  }
+
+  // pulse debris — scaled down at high mass
+  let debris = 46;
+  if (player.mass > 2600) debris = 20;
+  else if (player.mass > 1200) debris = 30;
+  spawnParticles(player.x, player.y, '#8dfcff', debris, 420);
+}
+
+// ---------- Input ----------
+canvas.addEventListener('mousemove', e=>{
+  const r = canvas.getBoundingClientRect();
+  mouse.x = e.clientX - r.left;
+  mouse.y = e.clientY - r.top;
+  mouse.active = true;
+});
+canvas.addEventListener('mousedown', e=>{ if(e.button===0) firePulse(); });
+canvas.addEventListener('touchstart', e=>{
+  const t = e.touches[0];
+  const r = canvas.getBoundingClientRect();
+  mouse.x = t.clientX - r.left; mouse.y = t.clientY - r.top; mouse.active = true;
+  firePulse();
+  e.preventDefault();
+}, {passive:false});
+canvas.addEventListener('touchmove', e=>{
+  const t = e.touches[0];
+  const r = canvas.getBoundingClientRect();
+  mouse.x = t.clientX - r.left; mouse.y = t.clientY - r.top; mouse.active = true;
+  e.preventDefault();
+}, {passive:false});
+
+window.addEventListener('keydown', e=>{
+  keys[e.key.toLowerCase()] = true;
+  if (e.code === 'Space'){ firePulse(); e.preventDefault(); }
+});
+window.addEventListener('keyup', e=>{ keys[e.key.toLowerCase()] = false; });
+
+startBtn.addEventListener('click', ()=>{ startGame(); });
+restartBtn.addEventListener('click', ()=>{ startGame(); });
+
+function startGame(){
+  initGame();
+  startScreen.classList.add('hidden');
+  endScreen.classList.add('hidden');
+  hud.classList.remove('hidden');
+  pulseUI.classList.remove('hidden');
+  running = true;
+  last = performance.now();
+}
+
+function endGame(won){
+  running = false;
+  hud.classList.add('hidden');
+  pulseUI.classList.add('hidden');
+  endScreen.classList.remove('hidden');
+  if (won){
+    endTitle.textContent = 'SINGULARITY ACHIEVED';
+    endMsg.textContent = 'You swallowed the galactic core. Reality folds inward around you — nothing escapes now. The Big Swallow is complete.';
+  } else {
+    endTitle.textContent = 'TORN APART';
+    endMsg.textContent = 'A greater mass caught your event horizon and spaghettified you across the void. The cosmos swallows the swallower.';
+  }
+  endStats.textContent = `Final mass: ${Math.floor(player.mass)}  ·  Bodies devoured: ${devoured}  ·  Time: ${elapsed.toFixed(1)}s`;
+}
+
+// ---------- Update ----------
+function stageFor(mass){
+  let s = STAGES[0];
+  for (const st of STAGES) if (mass >= st.m) s = st;
+  return s;
+}
+
+function update(dt){
+  elapsed += dt;
+
+  // pulse recharge
+  pulseCharge = clamp(pulseCharge + dt*PULSE_RECHARGE, 0, 1);
+
+  // player movement: toward mouse or WASD
+  const speed = 210 * (1 + Math.min(player.mass/2600, 0.55));
+  let ax=0, ay=0;
+  let usingKeys = keys['w']||keys['a']||keys['s']||keys['d']||
+                  keys['arrowup']||keys['arrowdown']||keys['arrowleft']||keys['arrowright'];
+  if (usingKeys){
+    if (keys['w']||keys['arrowup']) ay -= 1;
+    if (keys['s']||keys['arrowdown']) ay += 1;
+    if (keys['a']||keys['arrowleft']) ax -= 1;
+    if (keys['d']||keys['arrowright']) ax += 1;
+    const l = Math.hypot(ax,ay)||1; ax/=l; ay/=l;
+    player.vx += ax * speed * dt * 6;
+    player.vy += ay * speed * dt * 6;
+  } else if (mouse.active){
+    const wx = cam.x + (mouse.x - W/2);
+    const wy = cam.y + (mouse.y - H/2);
+    const dx = wx - player.x, dy = wy - player.y;
+    const d = Math.hypot(dx,dy);
+    if (d > 4){
+      const nx=dx/d, ny=dy/d;
+      const accel = Math.min(d, 260)/260;
+      player.vx += nx * speed * dt * 6 * accel;
+      player.vy += ny * speed * dt * 6 * accel;
+    }
+  }
+  // damping / max speed
+  const damp = Math.pow(0.0009, dt);
+  player.vx *= damp; player.vy *= damp;
+  const pmax = speed;
+  const psp = Math.hypot(player.vx,player.vy);
+  if (psp > pmax){ player.vx = player.vx/psp*pmax; player.vy = player.vy/psp*pmax; }
+  player.x += player.vx * dt;
+  player.y += player.vy * dt;
+  player.x = clamp(player.x, player.r, WORLD.w-player.r);
+  player.y = clamp(player.y, player.r, WORLD.h-player.r);
+  player.r = massToRadius(player.mass);
+
+  // gravity well affects nearby bodies; core pull radius scales with player mass
+  const wellR = 260 + player.mass * 0.55;
+  const wellR2 = wellR*wellR;
+
+  for (let i=bodies.length-1; i>=0; i--){
+    const b = bodies[i];
+    b.ang += b.spin * dt;
+
+    // gravity toward player
+    const dx = player.x - b.x, dy = player.y - b.y;
+    const d2 = dx*dx+dy*dy;
+    if (d2 < wellR2){
+      const d = Math.sqrt(d2)||1;
+      const nx=dx/d, ny=dy/d;
+      let g = (900 + player.mass*0.5) / (d*0.6 + 40);
+      // BALANCE: reduce pull on bodies LARGER than player so they don't get yanked in suddenly
+      if (b.mass > player.mass){
+        g *= 0.45;
+      }
+      b.vx += nx * g * dt;
+      b.vy += ny * g * dt;
+    }
+
+    // integrate
+    b.vx *= Math.pow(0.35, dt);
+    b.vy *= Math.pow(0.35, dt);
+    b.x += b.vx * dt;
+    b.y += b.vy * dt;
+
+    // soft world bounds
+    if (b.x < b.r){ b.x=b.r; b.vx=Math.abs(b.vx)*0.5; }
+    if (b.x > WORLD.w-b.r){ b.x=WORLD.w-b.r; b.vx=-Math.abs(b.vx)*0.5; }
+    if (b.y < b.r){ b.y=b.r; b.vy=Math.abs(b.vy)*0.5; }
+    if (b.y > WORLD.h-b.r){ b.y=WORLD.h-b.r; b.vy=-Math.abs(b.vy)*0.5; }
+
+    // collision with player
+    const rr = player.r + b.r;
+    if (d2 < rr*rr*0.7){
+      if (b.mass <= player.mass){
+        // swallow
+        devoured++;
+        player.mass += b.mass * 0.6;
+        player.accretion = Math.min(player.accretion + b.r*0.4, 60);
+        // eat effect (scaled)
+        let pc = Math.min(10 + Math.floor(b.mass*0.4), 40);
+        if (player.mass > 2600) pc = Math.floor(pc*0.4);
+        else if (player.mass > 1200) pc = Math.floor(pc*0.65);
+        spawnParticles(b.x, b.y, b.c1, pc, 160 + b.r*4);
+        // spaghettification streaks toward player
+        let sc = Math.min(3 + Math.floor(b.r/6), 8);
+        if (player.mass > 1200) sc = Math.min(sc, 3);
+        for (let k=0;k<sc;k++){
+          const off = rand(-b.r,b.r);
+          spawnStreak(b.x+off, b.y+off, player.x, player.y, b.c2);
+        }
+        if (b.isCore){ bodies.splice(i,1); endGame(true); return; }
+        bodies.splice(i,1);
+        continue;
+      } else {
+        // player is smaller -> death
+        for (let k=0;k<26;k++){
+          spawnStreak(player.x+rand(-player.r,player.r), player.y+rand(-player.r,player.r), b.x, b.y, '#ff6a6a');
+        }
+        spawnParticles(player.x, player.y, '#ff5a5a', Math.min(60, particleCap()), 300);
+        endGame(false);
+        return;
+      }
+    }
+  }
+
+  // check win by mass too (safety)
+  if (player.mass >= WIN_MASS){ endGame(true); return; }
+
+  // update particles
+  for (let i=particles.length-1;i>=0;i--){
+    const p = particles[i];
+    p.life -= dt;
+    if (p.life <= 0){ particles.splice(i,1); continue; }
+    p.vx *= Math.pow(0.2, dt);
+    p.vy *= Math.pow(0.2, dt);
+    p.x += p.vx*dt; p.y += p.vy*dt;
+  }
+  // enforce cap continuously
+  const pcap = particleCap();
+  if (particles.length > pcap) particles.splice(0, particles.length - pcap);
+
+  // update streaks
+  for (let i=streaks.length-1;i>=0;i--){
+    const s = streaks[i];
+    s.life -= dt;
+    if (s.life <= 0){ streaks.splice(i,1); continue; }
+    // stretch toward target
+    s.x += (s.tx - s.x) * Math.min(1, dt*4);
+    s.y += (s.ty - s.y) * Math.min(1, dt*4);
+  }
+  const scap = streakCap();
+  if (streaks.length > scap) streaks.splice(0, streaks.length - scap);
+
+  // update pulse rings
+  for (let i=pulseRings.length-1;i>=0;i--){
+    const pr = pulseRings[i];
+    pr.life -= dt;
+    if (pr.life <= 0){ pulseRings.splice(i,1); continue; }
+    const t = 1 - pr.life/pr.max;
+    pr.r = (pr.maxR) * t + (player.r+6)*(1-t);
+  }
+
+  // accretion glow decay
+  player.accretion *= Math.pow(0.1, dt);
+
+  // camera follow
+  cam.x += (player.x - cam.x) * Math.min(1, dt*3.5);
+  cam.y += (player.y - cam.y) * Math.min(1, dt*3.5);
+
+  maybeSpawn();
+
+  // ---------- DANGER WARNING with hysteresis ----------
+  // increase detection range for massive threats
+  const baseDon = 520 + player.r*3;
+  let anyDanger = false;
+  let closestFrac = 0; // how deep inside (for vignette intensity)
+  for (const b of bodies){
+    if (b.mass <= player.mass) continue;
+    // massive threats detected from further away
+    const threatScale = 1 + clamp((b.mass - player.mass)/ (player.mass+1), 0, 3) * 0.35;
+    const dOn = baseDon * threatScale;
+    const dOff = dOn * 1.3;
+    const d = Math.hypot(b.x-player.x, b.y-player.y);
+    // hysteresis: threshold depends on current state
+    const thresh = dangerActive ? dOff : dOn;
+    if (d < thresh){
+      anyDanger = true;
+      const frac = 1 - clamp(d / dOff, 0, 1);
+      if (frac > closestFrac) closestFrac = frac;
+    }
+  }
+  dangerActive = anyDanger;
+  const intensity = dangerActive ? (0.12 + closestFrac*0.55) : 0;
+  dangerVignette.style.boxShadow = `inset 0 0 ${140 + closestFrac*90}px ${30+closestFrac*40}px rgba(255,40,60,${intensity.toFixed(3)})`;
+
+  // ---------- HUD ----------
+  massLabel.textContent = 'Mass: ' + Math.floor(player.mass);
+  const st = stageFor(player.mass);
+  stageLabel.textContent = 'Stage: ' + st.name;
+  massSub.textContent = dangerActive ? '⚠ Larger mass nearby!' : 'Feed on smaller matter';
+  const barPct = clamp(player.mass / WIN_MASS * 100, 0, 100);
+  barInner.style.width = barPct + '%';
+  pulseFill.style.width = (pulseCharge*100) + '%';
+  pulseText.textContent = pulseCharge >= 0.999 ? 'Gravity Pulse: READY' : 'Gravity Pulse: charging…';
+}
+
+// ---------- Render ----------
+function worldToScreen(x,y){
+  return [ x - cam.x + W/2, y - cam.y + H/2 ];
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+
+  // deep space gradient
+  const g = ctx.createRadialGradient(W/2,H/2,80, W/2,H/2, Math.max(W,H));
+  g.addColorStop(0,'#0a0f1e');
+  g.addColorStop(1,'#04050a');
+  ctx.fillStyle = g;
+  ctx.fillRect(0,0,W,H);
+
+  // stars with parallax
+  for (const s of stars){
+    const px = s.x - cam.x*s.z + W/2;
+    const py = s.y - cam.y*s.z + H/2;
+    const sx = ((px % (WORLD.w)) + WORLD.w) % WORLD.w;
+    const sy = ((py % (WORLD.h)) + WORLD.h) % WORLD.h;
+    // wrap into a broad visible band
+    let dx = sx, dy = sy;
+    if (dx > W+50) dx -= WORLD.w;
+    if (dy > H+50) dy -= WORLD.h;
+    if (dx < -50 || dx > W+50 || dy < -50 || dy > H+50) continue;
+    ctx.globalAlpha = 0.4 + s.z*0.5;
+    ctx.fillStyle = '#cfe0ff';
+    ctx.fillRect(dx, dy, s.s, s.s);
+  }
+  ctx.globalAlpha = 1;
+
+  // world border
+  const [bx,by] = worldToScreen(0,0);
+  ctx.strokeStyle = 'rgba(120,150,255,0.15)';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(bx, by, WORLD.w, WORLD.h);
+
+  // streaks (spaghettification)
+  for (const s of streaks){
+    const [x1,y1] = worldToScreen(s.x,s.y);
+    const [x2,y2] = worldToScreen(s.tx,s.ty);
+    ctx.globalAlpha = clamp(s.life/s.max,0,1);
+    ctx.strokeStyle = s.col;
+    ctx.lineWidth = s.w;
+    ctx.beginPath();
+    ctx.moveTo(x1,y1); ctx.lineTo(x2,y2);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // bodies
+  for (const b of bodies){
+    const [x,y] = worldToScreen(b.x,b.y);
+    if (x < -80 || x > W+80 || y < -80 || y > H+80) continue;
+    const bigger = b.mass > player.mass;
+    // glow for cores/large
+    if (b.isCore){
+      const cg = ctx.createRadialGradient(x,y,b.r*0.2, x,y,b.r*2.4);
+      cg.addColorStop(0,'rgba(255,240,180,0.5)');
+      cg.addColorStop(1,'rgba(255,240,180,0)');
+      ctx.fillStyle = cg;
+      ctx.beginPath(); ctx.arc(x,y,b.r*2.4,0,Math.PI*2); ctx.fill();
+    }
+    const grad = ctx.createRadialGradient(x-b.r*0.3,y-b.r*0.3,b.r*0.15, x,y,b.r);
+    grad.addColorStop(0,b.c1);
+    grad.addColorStop(1,b.c2);
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(x,y,b.r,0,Math.PI*2); ctx.fill();
+    // danger outline on bigger bodies
+    if (bigger){
+      ctx.strokeStyle = 'rgba(255,80,90,0.85)';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(x,y,b.r+3,0,Math.PI*2); ctx.stroke();
+    }
+    if (b.isCore){
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.font = 'bold 12px Trebuchet MS';
+      ctx.textAlign='center';
+      ctx.fillText('CORE', x, y+4);
+    }
+  }
+
+  // particles
+  for (const p of particles){
+    const [x,y] = worldToScreen(p.x,p.y);
+    ctx.globalAlpha = clamp(p.life/p.max,0,1);
+    ctx.fillStyle = p.col;
+    ctx.beginPath(); ctx.arc(x,y,p.r,0,Math.PI*2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // ---------- Player (black hole with gravity lensing) ----------
+  const [px,py] = worldToScreen(player.x,player.y);
+  const R = player.r;
+
+  // lensing halo
+  const halo = ctx.createRadialGradient(px,py,R*0.6, px,py,R*2.6);
+  halo.addColorStop(0,'rgba(140,110,255,0.0)');
+  halo.addColorStop(0.55,'rgba(120,90,255,0.18)');
+  halo.addColorStop(0.8,'rgba(90,200,255,0.10)');
+  halo.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle = halo;
+  ctx.beginPath(); ctx.arc(px,py,R*2.6,0,Math.PI*2); ctx.fill();
+
+  // accretion disk (rotating glow ring)
+  const t = elapsed*2;
+  for (let i=0;i<3;i++){
+    const rr = R*1.25 + i*4;
+    ctx.strokeStyle = `rgba(${120+i*30},${140+i*20},255,${0.35 - i*0.08 + player.accretion*0.004})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(px,py,rr, t+i, t+i+Math.PI*1.5);
+    ctx.stroke();
+  }
+
+  // event horizon (black core)
+  const core = ctx.createRadialGradient(px,py,0, px,py,R);
+  core.addColorStop(0,'#000');
+  core.addColorStop(0.82,'#000');
+  core.addColorStop(1,'rgba(20,10,40,0.9)');
+  ctx.fillStyle = core;
+  ctx.beginPath(); ctx.arc(px,py,R,0,Math.PI*2); ctx.fill();
+
+  // thin photon ring
+  ctx.strokeStyle = 'rgba(180,200,255,0.6)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(px,py,R+1,0,Math.PI*2); ctx.stroke();
+
+  // ---------- Pulse rings (bright cyan/white, distinct from lensing) ----------
+  for (const pr of pulseRings){
+    const [x,y] = worldToScreen(pr.x, pr.y);
+    const a = clamp(pr.life/pr.max, 0, 1);
+    // outer bright cyan ring
+    ctx.strokeStyle = `rgba(120,255,255,${(0.85*a).toFixed(3)})`;
+    ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.arc(x,y,pr.r,0,Math.PI*2); ctx.stroke();
+    // inner white ring for contrast
+    ctx.strokeStyle = `rgba(255,255,255,${(0.7*a).toFixed(3)})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x,y,pr.r*0.94,0,Math.PI*2); ctx.stroke();
+  }
+}
+
+// ---------- Loop ----------
+let last = performance.now();
+function frame(now){
+  const dt = Math.min((now - last)/1000, 0.05);
+  last = now;
+  if (running){
+    update(dt);
+  }
+  draw();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>

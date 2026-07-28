@@ -1,11 +1,12 @@
 from crewai import Agent, Crew, LLM, Process, Task
-from crewai.project import CrewBase, agent, crew, task
+from crewai.project import CrewBase, agent, before_kickoff, crew, task
 from crewai.agents.agent_builder.base_agent import BaseAgent
 from crewai_tools import TavilySearchTool
 from pydantic import BaseModel, Field
 
 from .tools.here_now_tool import deploy_to_here_now
 from .tools.telegram_tool import send_telegram_message
+from .tools.write_game_html_tool import set_game_title, verify_game_html, write_game_html
 
 
 class GameConceptBrief(BaseModel):
@@ -37,6 +38,10 @@ class Mabstructgamesstudio():
     agents: list[BaseAgent]
     tasks: list[Task]
 
+    @before_kickoff
+    def bind_game_title(self, inputs: dict) -> dict:
+        set_game_title(str(inputs.get("game_title", "")))
+        return inputs
 
     @agent
     def game_producer(self) -> Agent:
@@ -68,9 +73,10 @@ class Mabstructgamesstudio():
     def game_developer(self) -> Agent:
         return Agent(
             config=self.agents_config['game_developer'], # type: ignore[index]
-            llm=LLM(model="anthropic/claude-fable-5", max_tokens=50000, timeout=600),
+            llm=LLM(model="anthropic/claude-opus-4-8", max_tokens=64000, timeout=900),
             verbose=True,
             allow_delegation=False,
+            tools=[write_game_html, verify_game_html],
         )
 
     @agent
@@ -132,16 +138,16 @@ class Mabstructgamesstudio():
     def crew(self) -> Crew:
         """Creates the Mabstructgamesstudio crew"""
         return Crew(
-            agents=[
-                self.game_creative_strategist(),
-                self.game_designer(),
-                self.game_developer(),
-                self.game_tester(),
-                self.game_deployer(),
+            agents=self.agents,
+            tasks=[
+                self.game_ideation_task(),
+                self.game_design_task(),
+                self.game_development_task(),
+                self.game_testing_task(),
+                self.game_deployment_task(),
+                self.game_production_task(),
             ],
-            tasks=self.tasks,
-            process=Process.hierarchical,
-            manager_agent=self.game_producer(),
+            process=Process.sequential,
             verbose=True,
             tracing=True,
         )

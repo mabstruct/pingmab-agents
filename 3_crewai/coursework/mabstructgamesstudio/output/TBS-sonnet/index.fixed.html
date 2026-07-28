@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Big Swallow</title>
+<style>
+  html,body{margin:0;padding:0;height:100%;background:#05030c;overflow:hidden;
+    font-family:'Trebuchet MS',sans-serif;color:#e8e0ff;user-select:none;}
+  #wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;}
+  canvas{display:block;background:#05030c;touch-action:none;}
+  #hud{position:absolute;top:0;left:0;right:0;padding:14px 20px;
+    pointer-events:none;display:flex;justify-content:space-between;align-items:flex-start;
+    font-size:14px;letter-spacing:1px;text-shadow:0 0 8px #000;}
+  #stageName{font-size:18px;font-weight:bold;letter-spacing:3px;
+    text-transform:uppercase;opacity:.9;}
+  #timer{font-size:20px;letter-spacing:3px;opacity:.85;font-variant-numeric:tabular-nums;}
+  #readout{text-align:right;line-height:1.5;font-variant-numeric:tabular-nums;}
+  #massbar{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);
+    width:260px;height:8px;background:rgba(255,255,255,.12);border-radius:6px;
+    overflow:hidden;box-shadow:0 0 12px rgba(120,80,220,.4);}
+  #massfill{height:100%;width:0%;
+    background:linear-gradient(90deg,#6a3cff,#c46bff,#ff9ce8);
+    transition:width .2s;}
+  #hint{position:absolute;bottom:42px;left:0;right:0;text-align:center;
+    font-size:12px;letter-spacing:2px;color:#9c8cc4;opacity:.75;pointer-events:none;}
+  #msg{position:absolute;top:42%;left:0;right:0;text-align:center;
+    font-size:34px;letter-spacing:6px;text-transform:uppercase;opacity:0;
+    pointer-events:none;text-shadow:0 0 24px #b98cff;transition:opacity .8s;}
+  #sub{position:absolute;top:52%;left:0;right:0;text-align:center;
+    font-size:15px;letter-spacing:3px;opacity:0;transition:opacity .8s;color:#c9b8ff;}
+  .overlay{position:absolute;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;text-align:center;
+    background:radial-gradient(circle at 50% 40%,#160a2e,#05030c);z-index:10;}
+  #start h1{font-size:52px;letter-spacing:8px;margin:0;
+    background:linear-gradient(90deg,#8a5cff,#ff9ce8,#7cf0ff);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    text-shadow:0 0 40px rgba(160,110,255,.5);}
+  #start p{max-width:480px;line-height:1.6;color:#bcaadd;font-size:15px;}
+  .controls{margin:4px 0 6px;color:#8f7fba;font-size:13px;letter-spacing:1px;line-height:1.9;}
+  .controls b{color:#c9b8ff;font-weight:normal;
+    border:1px solid rgba(160,120,255,.35);border-radius:4px;padding:1px 7px;}
+  .btn{margin-top:18px;padding:12px 34px;font-size:16px;letter-spacing:2px;
+    cursor:pointer;pointer-events:auto;border:1px solid #8a5cff;border-radius:30px;
+    background:rgba(120,80,220,.15);color:#e8e0ff;text-transform:uppercase;
+    transition:.2s;}
+  .btn:hover{background:rgba(160,110,255,.35);box-shadow:0 0 20px #8a5cff;}
+  .modes{display:flex;gap:16px;align-items:flex-start;}
+  .mode{display:flex;flex-direction:column;align-items:center;width:190px;}
+  .mode span{margin-top:8px;font-size:12px;color:#8f7fba;line-height:1.5;letter-spacing:.5px;}
+  #over{display:none;background:radial-gradient(circle at 50% 40%,rgba(22,10,46,.94),rgba(5,3,12,.97));}
+  #overTitle{font-size:42px;letter-spacing:7px;text-transform:uppercase;margin:0;
+    text-shadow:0 0 30px #b98cff;}
+  #overSub{color:#c9b8ff;letter-spacing:3px;margin-top:10px;font-size:14px;}
+  #overStats{margin-top:26px;color:#bcaadd;font-size:15px;line-height:2;
+    font-variant-numeric:tabular-nums;}
+  #overStats b{color:#fff;font-weight:normal;}
+  #pause{display:none;background:rgba(5,3,12,.72);}
+  #pause h2{font-size:34px;letter-spacing:8px;margin:0;text-transform:uppercase;}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="c"></canvas></div>
+
+<div id="hud">
+  <div id="stageName">Pebble</div>
+  <div id="timer"></div>
+  <div id="readout"><div id="massOut">Mass 8</div><div id="scoreOut">Score 0</div></div>
+</div>
+<div id="massbar"><div id="massfill"></div></div>
+<div id="hint">Drag to thrust &nbsp;·&nbsp; P pause &nbsp;·&nbsp; R restart &nbsp;·&nbsp; Esc title</div>
+<div id="msg"></div>
+<div id="sub"></div>
+
+<div id="start" class="overlay">
+  <h1>THE BIG SWALLOW</h1>
+  <p><i>Feed the Void, Become the Cosmos.</i><br><br>
+  You are The Maw — a newborn point of gravitational hunger.
+  Swallow anything smaller than you to grow.
+  Anything larger will tear you apart. Ascend through six stages of scale.</p>
+  <div class="controls">
+    <b>Drag</b> or <b>WASD</b> / <b>Arrows</b> to thrust &nbsp;&nbsp; <b>P</b> pause &nbsp;&nbsp; <b>Esc</b> title<br>
+    Red-ringed objects are bigger than you — they are lethal.
+  </div>
+  <div class="modes">
+    <div class="mode">
+      <div class="btn" id="btnCampaign">Campaign</div>
+      <span>5-minute run. Ascend as far as you can before the clock stops.</span>
+    </div>
+    <div class="mode">
+      <div class="btn" id="btnZen">Zen</div>
+      <span>No clock, no run end, gentler setbacks. Drift and grow.</span>
+    </div>
+  </div>
+</div>
+
+<div id="over" class="overlay">
+  <h2 id="overTitle">Time Up</h2>
+  <div id="overSub"></div>
+  <div id="overStats"></div>
+  <div class="modes">
+    <div class="btn" id="btnRetry">Retry</div>
+    <div class="btn" id="btnTitle">Title</div>
+  </div>
+</div>
+
+<div id="pause" class="overlay"><h2>Paused</h2><div id="overSub2">Press P to resume</div></div>
+
+<script>
+(function(){
+"use strict";
+
+// ============================================================
+// THE BIG SWALLOW  —  fixed build
+// All JS lives in ONE <script> block. The original split this
+// across five blocks with an IIFE spanning the boundary, which
+// cannot parse. See ANALYSIS.md.
+// ============================================================
+
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+const $=id=>document.getElementById(id);
+let W=0,H=0,DPR=1;
+
+function resize(){
+  DPR=Math.min(2,window.devicePixelRatio||1);
+  W=window.innerWidth;H=window.innerHeight;
+  cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR);
+  cv.style.width=W+'px';cv.style.height=H+'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+window.addEventListener('resize',resize);resize();
+
+// ---- Tuning constants (all in per-SECOND units) ----
+const RUN_TIME  = 300;    // campaign clock, seconds
+const DAMP      = 0.74;   // maw velocity retained per second
+const LAM       = 0.301;  // -ln(DAMP); used to derive terminal speed
+const OBJ_DAMP  = 0.30;   // probe velocity retained per second
+const PULL      = 21;     // gravity well acceleration, px/s^2
+const THRUST    = 225;    // thrust coefficient, px/s^2 at mass 1
+const PULSE_F   = 260;    // pulsar shockwave impulse, px/s
+const INV_REFORM= 1.8;    // invulnerability after reforming, seconds
+
+// ---- Stage definitions ----
+const STAGES=[
+ {name:"Pebble",         thresh:60,    bg:["#1a1208","#05030c"], col:"#c9b18a"},
+ {name:"Rock",           thresh:200,   bg:["#141018","#05030c"], col:"#a9b0c0"},
+ {name:"Planet-Eater",   thresh:600,   bg:["#08161e","#05030c"], col:"#5fd0b0"},
+ {name:"Star-Swallower", thresh:1600,  bg:["#22120a","#05030c"], col:"#ffb35c"},
+ {name:"Galaxy-Gulper",  thresh:4200,  bg:["#180a26","#05030c"], col:"#c07cff"},
+ {name:"The Big Swallow",thresh:11000, bg:["#0a0a1e","#05030c"], col:"#7cf0ff"}
+];
+// Spawn masses are relative to your own, so growth is exponential with no
+// natural ceiling. Campaign's clock hides that; endless Zen does not — without
+// a cap mass runs away past 1e40 and the render maths degenerates.
+const MASS_CAP=STAGES[STAGES.length-1].thresh*1.2;
+
+// ---- Game state ----
+const G={
+  running:false, paused:false, over:false, mode:"campaign", stage:0,
+  maw:{x:0,y:0,vx:0,vy:0,mass:8},
+  cam:{x:0,y:0,zoom:1,tzoom:1},
+  objs:[], particles:[], strands:[],
+  score:0, eaten:0, t:0, timeLeft:RUN_TIME, won:false,
+  transition:0, dead:false, deadT:0, inv:0, fog:0
+};
+
+function mawRadius(){return Math.max(6,Math.sqrt(G.maw.mass)*3.2);}
+// Floor the well so it has real reach at low mass — otherwise early game is
+// 40px of pull and food has to be chased down by hand.
+function gravRadius(){return Math.max(90,mawRadius()*4.5);}
+function objR(o){return Math.max(4,Math.sqrt(o.mass)*3.2);}
+function thrustAccel(){return THRUST/Math.pow(G.maw.mass,0.25);}
+function maxSpeed(){return thrustAccel()/LAM*1.6;}
+// View radius in world units — replaces the old fixed worldR, so spawning
+// adapts to screen size and zoom instead of leaking across runs.
+function viewR(){return Math.hypot(W,H)/2/Math.max(0.05,G.cam.zoom);}
+
+function rand(a,b){return a+Math.random()*(b-a);}
+function TAU(){return Math.PI*2;}
+// frame-rate independent exponential lerp
+function lerpK(retainPerFrame,dt){return 1-Math.pow(retainPerFrame,dt*60);}
+
+// ---- Object spawning ----
+function spawnObj(opt){
+  opt=opt||{};
+  const vr=viewR();
+  const sp=Math.hypot(G.maw.vx,G.maw.vy);
+  // Respawn just beyond the screen edge, biased into the maw's path, so the
+  // field stays populated as you travel. (Spawning far out starves the game:
+  // objects only drift at ~20px/s and never come back.)
+  const a=(!opt.near&&sp>30)?Math.atan2(G.maw.vy,G.maw.vx)+rand(-1.2,1.2):rand(0,TAU());
+  const d=opt.near?rand(vr*0.30,vr*0.92):rand(vr*1.05,vr*1.40);
+  const x=G.maw.x+Math.cos(a)*d, y=G.maw.y+Math.sin(a)*d;
+  const base=G.maw.mass;
+  let type="rock", hazard=null, mass;
+  const hr=Math.random();
+  if(opt.safe){
+    mass=rand(base*0.15,base*0.5);
+  } else if(hr<0.08){
+    type="antimass"; mass=rand(base*0.2,base*0.6);
+  } else if(hr<0.14){
+    type="pulsar"; mass=rand(base*1.5,base*3); hazard="pulse";
+  } else if(hr<0.19 && G.stage>=3){
+    type="darkcloud"; mass=rand(base*3,base*6);
+  } else if(hr<0.24 && G.stage>=4){
+    type="probe"; mass=rand(base*0.3,base*0.7); hazard="flee";
+  } else {
+    // The lethal share thins as you ascend — the fiction is that you become
+    // dominant. Held flat, a Pebble-era threat density at Galaxy scale means
+    // a 368px maw cannot dodge anything its own well drags in.
+    const danger=Math.max(0.05,0.20-G.stage*0.03);
+    const r=Math.random();
+    if(r<0.55)         mass=rand(base*0.15,base*0.85);  // safe food
+    else if(r<1-danger)mass=rand(base*0.85,base*1.05);  // risky near-miss
+    else               mass=rand(base*1.1,base*2.6);    // dangerous
+  }
+  return {x,y,vx:rand(-20,20),vy:rand(-20,20),mass,type,hazard,
+    pulseT:rand(2.5,5),charge:0,flash:0,
+    spin:rand(0,TAU()),spinV:rand(-0.5,0.5),tint:rand(-25,25)};
+}
+
+function populate(n){
+  G.objs=[];
+  // guarantee a few safe meals within view so the opening is not hostile
+  for(let i=0;i<6;i++)G.objs.push(spawnObj({near:true,safe:true}));
+  for(let i=6;i<n;i++)G.objs.push(spawnObj({near:i<n*0.55}));
+}
+
+// Teleport any lethal object sitting on top of the maw. Used after reforming
+// and after ascending, so the player never resumes inside a killer.
+function clearDanger(){
+  const mr=mawRadius(),pad=viewR()*0.25;
+  for(let i=G.objs.length-1;i>=0;i--){
+    const o=G.objs[i];
+    if(o.type==="darkcloud"||o.mass<=G.maw.mass)continue;
+    const d=Math.hypot(o.x-G.maw.x,o.y-G.maw.y);
+    if(d<mr+objR(o)+pad){G.objs.splice(i,1);G.objs.push(spawnObj());}
+  }
+}
+
+// ---- Lifecycle ----
+function updateStageName(){$('stageName').textContent=STAGES[G.stage].name;}
+
+function startGame(mode){
+  G.mode=mode;G.stage=0;G.running=true;G.paused=false;G.over=false;
+  G.dead=false;G.deadT=0;G.transition=0;G.inv=1.2;G.fog=0;
+  G.maw={x:0,y:0,vx:0,vy:0,mass:8};
+  G.score=0;G.eaten=0;G.t=0;G.timeLeft=RUN_TIME;G.won=false;
+  G.particles=[];G.strands=[];
+  G.cam={x:0,y:0,zoom:1,tzoom:1};
+  populate(46);
+  updateStageName();
+  $('timer').textContent=mode==='campaign'?fmtTime(RUN_TIME):'';
+  $('start').style.display='none';
+  $('over').style.display='none';
+  $('pause').style.display='none';
+}
+
+function toTitle(){
+  G.running=false;G.paused=false;G.over=false;
+  $('over').style.display='none';
+  $('pause').style.display='none';
+  $('start').style.display='flex';
+}
+
+function endRun(title,sub){
+  if(G.over)return;
+  G.over=true;G.paused=false;
+  updateHUD();   // the winning/final frame returns early, so repaint here
+  $('pause').style.display='none';
+  $('overTitle').textContent=title;
+  $('overSub').textContent=sub||'';
+  $('overStats').innerHTML=
+    'Final stage &nbsp;<b>'+STAGES[G.stage].name+'</b><br>'+
+    'Final mass &nbsp;<b>'+Math.floor(G.maw.mass)+'</b><br>'+
+    'Objects swallowed &nbsp;<b>'+G.eaten+'</b><br>'+
+    'Score &nbsp;<b>'+Math.floor(G.score)+'</b>';
+  $('over').style.display='flex';
+}
+
+function togglePause(){
+  if(!G.running||G.over||G.dead)return;
+  G.paused=!G.paused;
+  $('pause').style.display=G.paused?'flex':'none';
+}
+
+$('btnCampaign').onclick=()=>startGame('campaign');
+$('btnZen').onclick=()=>startGame('zen');
+$('btnRetry').onclick=()=>startGame(G.mode);
+$('btnTitle').onclick=toTitle;
+
+// ---- Input: drag + keyboard ----
+let dragging=false,dragX=0,dragY=0;
+const keys={};
+function pos(e){const t=e.touches?e.touches[0]:e;return{x:t.clientX,y:t.clientY};}
+cv.addEventListener('mousedown',e=>{dragging=true;const p=pos(e);dragX=p.x;dragY=p.y;});
+cv.addEventListener('touchstart',e=>{dragging=true;const p=pos(e);dragX=p.x;dragY=p.y;e.preventDefault();},{passive:false});
+window.addEventListener('mousemove',e=>{if(dragging){const p=pos(e);dragX=p.x;dragY=p.y;}});
+window.addEventListener('touchmove',e=>{if(dragging){const p=pos(e);dragX=p.x;dragY=p.y;e.preventDefault();}},{passive:false});
+window.addEventListener('mouseup',()=>{dragging=false;});
+window.addEventListener('touchend',()=>{dragging=false;});
+
+window.addEventListener('keydown',e=>{
+  const k=e.key.toLowerCase();
+  if(k==='arrowleft'||k==='a')keys.l=1;
+  if(k==='arrowright'||k==='d')keys.r=1;
+  if(k==='arrowup'||k==='w')keys.u=1;
+  if(k==='arrowdown'||k==='s')keys.d=1;
+  if(k==='p')togglePause();
+  if(k==='r'&&G.running)startGame(G.mode);
+  if(k==='escape'&&G.running)toTitle();
+  if(['arrowleft','arrowright','arrowup','arrowdown',' '].indexOf(k)>=0)e.preventDefault();
+});
+window.addEventListener('keyup',e=>{
+  const k=e.key.toLowerCase();
+  if(k==='arrowleft'||k==='a')keys.l=0;
+  if(k==='arrowright'||k==='d')keys.r=0;
+  if(k==='arrowup'||k==='w')keys.u=0;
+  if(k==='arrowdown'||k==='s')keys.d=0;
+});
+// auto-pause when the tab is hidden
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden&&G.running&&!G.over&&!G.paused)togglePause();
+});
+
+function applyThrust(dt){
+  if(G.dead||G.transition>0)return;
+  let dx=0,dy=0;
+  if(dragging){dx=dragX-W/2;dy=dragY-H/2;}
+  if(keys.l)dx-=100; if(keys.r)dx+=100;
+  if(keys.u)dy-=100; if(keys.d)dy+=100;
+  const len=Math.hypot(dx,dy);
+  if(len<1)return;
+  const a=thrustAccel();
+  G.maw.vx+=(dx/len)*a*dt;
+  G.maw.vy+=(dy/len)*a*dt;
+}
+
+// ---- Effects ----
+function burst(x,y,c,n,spd){
+  for(let i=0;i<n;i++){const a=rand(0,TAU()),s=rand(30,spd*60);
+    G.particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:1,c});}
+}
+function showMsg(m,s){
+  const M=$('msg'),S=$('sub');
+  M.textContent=m;S.textContent=s||"";
+  M.style.opacity=1;S.style.opacity=1;
+  clearTimeout(showMsg._t);
+  showMsg._t=setTimeout(()=>{M.style.opacity=0;S.style.opacity=0;},2200);
+}
+function fmtTime(s){
+  s=Math.max(0,Math.ceil(s));
+  return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
+}
+
+// ---- Spaghettification ----
+function spaghettify(){
+  G.dead=true;G.deadT=0;G.strands=[];
+  const mr=mawRadius();
+  for(let i=0;i<40;i++){
+    G.strands.push({a:rand(0,TAU()),len:rand(mr,mr*3),grow:rand(120,360),hue:rand(240,320)});
+  }
+  showMsg("Spaghettified","Torn into strands of light...");
+}
+
+function reform(){
+  G.dead=false;G.strands=[];
+  // Zen keeps more of your mass — the two modes now actually differ.
+  const keep=G.mode==='zen'?0.75:0.55;
+  G.maw.mass=Math.max(6,G.maw.mass*keep);
+  G.maw.vx=G.maw.vy=0;
+  G.inv=INV_REFORM;
+  if(G.stage>0 && G.maw.mass<STAGES[G.stage-1].thresh){G.stage--;updateStageName();}
+  clearDanger();
+  burst(G.maw.x,G.maw.y,"#b98cff",50,4);
+}
+
+// ---- Stage transition ----
+function ascend(){
+  G.stage++;
+  const st=STAGES[G.stage];
+  G.transition=1;          // eases 1 -> 0
+  G.cam.tzoom=0.25;        // zoom way out for the reveal
+  G.inv=2.6;               // no dying while the camera has taken over
+  updateStageName();
+  showMsg("Ascension",st.name);
+  burst(G.maw.x,G.maw.y,st.col,80,6);
+}
+
+function win(){
+  G.won=true;
+  burst(G.maw.x,G.maw.y,"#7cf0ff",200,9);
+  if(G.mode==='campaign'){
+    showMsg("The Big Swallow","Nothing remains outside you.");
+    endRun("Universe Swallowed","You consumed the boundary itself");
+  } else {
+    // Zen is advertised as endless — mark the summit, then let it drift on.
+    showMsg("The Big Swallow","Nothing remains outside you. Drift on.");
+  }
+}
+
+// ---- Update ----
+function update(dt){
+  G.t+=dt;
+  applyThrust(dt);
+  const maw=G.maw;
+
+  if(G.dead){
+    G.deadT+=dt;
+    for(const s of G.strands)s.len+=s.grow*dt;
+    if(G.deadT>2.4)reform();
+    updateParticles(dt);
+    updateCamera(dt);
+    return;
+  }
+
+  if(G.inv>0)G.inv-=dt;
+
+  // campaign clock
+  if(G.mode==='campaign'){
+    G.timeLeft-=dt;
+    $('timer').textContent=fmtTime(G.timeLeft);
+    if(G.timeLeft<=0){G.timeLeft=0;endRun("Time Up","The clock beat your appetite");return;}
+  }
+
+  // maw movement — damping and integration are now dt-based
+  const f=Math.pow(DAMP,dt);
+  maw.vx*=f;maw.vy*=f;
+  const sp=Math.hypot(maw.vx,maw.vy),ms=maxSpeed();
+  if(sp>ms){maw.vx*=ms/sp;maw.vy*=ms/sp;}
+  maw.x+=maw.vx*dt;maw.y+=maw.vy*dt;
+
+  const mr=mawRadius(),gr=gravRadius(),vr=viewR();
+
+  // transition easing
+  if(G.transition>0){
+    G.transition-=dt*0.55;
+    if(G.transition<=0){G.transition=0;G.cam.tzoom=1;populate(48);clearDanger();}
+  }
+
+  // dark-matter fog: dampens gravity and obscures vision (previously a no-op)
+  let fogT=0;
+  for(const o of G.objs){
+    if(o.type!=="darkcloud")continue;
+    const R=objR(o),d=Math.hypot(o.x-maw.x,o.y-maw.y);
+    if(d<R)fogT=Math.max(fogT,1-d/R);
+  }
+  G.fog+=(fogT-G.fog)*Math.min(1,dt*3);
+
+  // objects
+  for(let i=G.objs.length-1;i>=0;i--){
+    const o=G.objs[i];
+
+    // pulsar: telegraphed charge, then shockwave
+    if(o.hazard==="pulse"){
+      o.pulseT-=dt;
+      o.charge=o.pulseT<0.9?Math.min(1,(0.9-o.pulseT)/0.9):0;
+      if(o.pulseT<=0){
+        o.pulseT=rand(3.5,5.5);o.charge=0;o.flash=1;
+        const dx=maw.x-o.x,dy=maw.y-o.y,d=Math.hypot(dx,dy)||1;
+        if(d<gr*3&&G.inv<=0){
+          const p=PULSE_F/(1+d*0.004);
+          maw.vx+=dx/d*p;maw.vy+=dy/d*p;
+        }
+      }
+    }
+    if(o.flash>0)o.flash=Math.max(0,o.flash-dt*2);
+
+    // probes flee
+    if(o.hazard==="flee"){
+      const dx=o.x-maw.x,dy=o.y-maw.y,d=Math.hypot(dx,dy)||1;
+      if(d<gr*2){o.vx+=dx/d*160*dt;o.vy+=dy/d*160*dt;}
+      const pf=Math.pow(OBJ_DAMP,dt);o.vx*=pf;o.vy*=pf;
+    }
+
+    o.x+=o.vx*dt;o.y+=o.vy*dt;o.spin+=o.spinV*dt;
+
+    const dx=maw.x-o.x,dy=maw.y-o.y,d=Math.hypot(dx,dy)||1;
+    const isCloud=(o.type==="darkcloud");
+
+    // gravity pull toward the maw, weakened inside dark matter
+    if(d<gr&&!isCloud){
+      const pull=(gr-d)/gr*PULL*(mr/(mr+objR(o)))*(1-G.fog*0.65);
+      o.vx+=dx/d*pull*dt;o.vy+=dy/d*pull*dt;
+    }
+
+    // collision
+    if(d<mr+objR(o)&&!isCloud){
+      if(o.mass>maw.mass){
+        if(G.inv<=0){
+          // remove the killer so reforming cannot chain-die on it
+          G.objs.splice(i,1);G.objs.push(spawnObj());
+          spaghettify();return;
+        }
+      } else {
+        eat(o);G.objs.splice(i,1);G.objs.push(spawnObj());
+        continue;
+      }
+    }
+
+    // recycle strays back into the play band
+    if(d>vr*1.9){G.objs.splice(i,1);G.objs.push(spawnObj());}
+  }
+
+  // ascension / victory
+  if(G.maw.mass>=STAGES[G.stage].thresh&&G.transition<=0){
+    if(G.stage<STAGES.length-1)ascend();
+    else if(!G.won){win();if(G.over)return;}
+  }
+
+  updateCamera(dt);
+  updateParticles(dt);
+
+  updateHUD();
+}
+
+function updateHUD(){
+  const st=STAGES[G.stage],prev=G.stage>0?STAGES[G.stage-1].thresh:0;
+  const frac=Math.max(0,Math.min(1,(G.maw.mass-prev)/(st.thresh-prev)));
+  $('massfill').style.width=(frac*100)+'%';
+  $('massOut').textContent='Mass '+Math.floor(G.maw.mass);
+  $('scoreOut').textContent='Score '+Math.floor(G.score);
+}
+
+function updateCamera(dt){
+  G.cam.x+=(G.maw.x-G.cam.x)*lerpK(0.94,dt);
+  G.cam.y+=(G.maw.y-G.cam.y)*lerpK(0.94,dt);
+  const growZoom=Math.max(0.35,1-Math.log(G.maw.mass/8+1)*0.08);
+  const targ=(G.transition>0?G.cam.tzoom:growZoom);
+  G.cam.zoom+=(targ-G.cam.zoom)*lerpK(0.96,dt);
+}
+
+function eat(o){
+  const gain=o.type==="antimass"?-o.mass*0.4:o.mass*0.35;
+  // near-miss bonus: bigger reward the closer the meal is to your own mass
+  let bonus=1;
+  if(o.type!=="antimass"){const ratio=o.mass/G.maw.mass;if(ratio>0.7)bonus=1.6;}
+  G.maw.mass=Math.max(6,Math.min(MASS_CAP,G.maw.mass+gain*bonus));
+  if(gain>0){G.score+=o.mass*bonus;G.eaten++;}
+  burst(o.x,o.y,o.type==="antimass"?"#ff4d6d":STAGES[G.stage].col,
+    o.type==="antimass"?24:18,3);
+}
+
+function updateParticles(dt){
+  const f=Math.pow(0.05,dt);
+  for(let i=G.particles.length-1;i>=0;i--){
+    const p=G.particles[i];
+    p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=f;p.vy*=f;
+    p.life-=dt*1.2;if(p.life<=0)G.particles.splice(i,1);
+  }
+}
+
+// ---- Rendering ----
+let stars=[];
+function initStars(){stars=[];for(let i=0;i<220;i++)
+  stars.push({x:rand(0,1),y:rand(0,1),z:rand(.2,1),s:rand(.4,1.8)});}
+initStars();
+
+function w2s(x,y){const z=G.cam.zoom;
+  return[(x-G.cam.x)*z+W/2,(y-G.cam.y)*z+H/2];}
+
+function shade(hex,amt){
+  const c=hex.replace('#','');
+  let r=parseInt(c.substr(0,2),16)+amt,g=parseInt(c.substr(2,2),16)+amt,b=parseInt(c.substr(4,2),16)+amt;
+  r=Math.max(0,Math.min(255,r));g=Math.max(0,Math.min(255,g));b=Math.max(0,Math.min(255,b));
+  return'rgb('+Math.round(r)+','+Math.round(g)+','+Math.round(b)+')';
+}
+
+function drawObj(o){
+  const s=w2s(o.x,o.y),sx=s[0],sy=s[1],r=objR(o)*G.cam.zoom;
+  if(sx<-r-60||sx>W+r+60||sy<-r-60||sy>H+r+60)return;
+  const bigger=o.mass>G.maw.mass;
+  ctx.save();ctx.translate(sx,sy);ctx.rotate(o.spin);
+  if(o.type==="antimass"){
+    ctx.fillStyle="rgba(255,60,110,.9)";
+    ctx.shadowColor="#ff2d55";ctx.shadowBlur=25;
+    ctx.beginPath();ctx.arc(0,0,r,0,TAU());ctx.fill();
+    ctx.shadowBlur=0;
+    ctx.strokeStyle="rgba(0,0,0,.6)";ctx.lineWidth=2;
+    for(let i=0;i<4;i++){const y0=(i/3-.5)*r*1.4;
+      ctx.beginPath();ctx.moveTo(-r,y0);ctx.lineTo(r,y0*.5);ctx.stroke();}
+  } else if(o.type==="pulsar"){
+    const fl=o.flash||0,ch=o.charge||0;
+    ctx.shadowColor="#7cf0ff";ctx.shadowBlur=20+fl*40+ch*30;
+    ctx.fillStyle="#bfeaff";ctx.beginPath();ctx.arc(0,0,r*(1+ch*.25),0,TAU());ctx.fill();
+    ctx.shadowBlur=0;
+    // charge telegraph: a ring collapsing inward before the shockwave fires
+    if(ch>0){
+      ctx.strokeStyle='rgba(190,245,255,'+(0.15+ch*0.7)+')';ctx.lineWidth=2;
+      ctx.beginPath();ctx.arc(0,0,r*(4.5-ch*2.6),0,TAU());ctx.stroke();
+    }
+    ctx.strokeStyle='rgba(140,240,255,'+(0.4+fl*0.5)+')';ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(0,0,r*(1.6+fl*2.4),0,TAU());ctx.stroke();
+  } else if(o.type==="darkcloud"){
+    const g=ctx.createRadialGradient(0,0,0,0,0,r);
+    g.addColorStop(0,"rgba(30,10,50,.85)");g.addColorStop(1,"rgba(10,4,20,0)");
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,r,0,TAU());ctx.fill();
+  } else if(o.type==="probe"){
+    ctx.fillStyle="#9effa0";ctx.shadowColor="#4dff6a";ctx.shadowBlur=15;
+    ctx.beginPath();
+    for(let i=0;i<3;i++){const a=i/3*TAU();
+      ctx[i?'lineTo':'moveTo'](Math.cos(a)*r,Math.sin(a)*r);}
+    ctx.closePath();ctx.fill();ctx.shadowBlur=0;
+  } else {
+    const st=STAGES[G.stage];
+    const g=ctx.createRadialGradient(-r*.3,-r*.3,r*.1,0,0,r);
+    g.addColorStop(0,shade(st.col,40+o.tint));
+    g.addColorStop(1,shade(st.col,-40+o.tint));
+    ctx.fillStyle=g;
+    if(bigger){ctx.shadowColor="#ff5a5a";ctx.shadowBlur=18;}
+    ctx.beginPath();ctx.arc(0,0,r,0,TAU());ctx.fill();
+    ctx.shadowBlur=0;
+    if(G.stage>=2){
+      ctx.strokeStyle=shade(st.col,10+o.tint);ctx.lineWidth=Math.max(1,r*.12);
+      ctx.beginPath();ctx.ellipse(0,0,r*1.7,r*.5,0.4,0,TAU());ctx.stroke();
+    }
+  }
+  ctx.restore();
+  // legibility rings: lethal = red, edible = cool outline
+  if(o.type!=="darkcloud"){
+    if(bigger){
+      ctx.strokeStyle="rgba(255,80,80,.45)";ctx.lineWidth=2;
+      ctx.beginPath();ctx.arc(sx,sy,r+6,0,TAU());ctx.stroke();
+    } else if(o.type!=="antimass"){
+      ctx.strokeStyle="rgba(140,220,255,.22)";ctx.lineWidth=1;
+      ctx.beginPath();ctx.arc(sx,sy,r+4,0,TAU());ctx.stroke();
+    }
+  }
+}
+
+function drawMaw(){
+  const s=w2s(G.maw.x,G.maw.y),sx=s[0],sy=s[1];
+  const mr=mawRadius()*G.cam.zoom,gr=gravRadius()*G.cam.zoom;
+  if(G.dead){
+    for(const st of G.strands){
+      ctx.strokeStyle='hsla('+st.hue+',80%,70%,'+Math.max(0,1-G.deadT/2.4)+')';
+      ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(sx,sy);
+      ctx.lineTo(sx+Math.cos(st.a)*st.len*G.cam.zoom,sy+Math.sin(st.a)*st.len*G.cam.zoom);
+      ctx.stroke();
+    }
+    return;
+  }
+  // flicker while invulnerable so the safety window is readable
+  ctx.globalAlpha=G.inv>0?0.45+0.35*Math.sin(G.t*18):1;
+  const gwell=ctx.createRadialGradient(sx,sy,mr,sx,sy,gr);
+  gwell.addColorStop(0,"rgba(120,80,220,.18)");
+  gwell.addColorStop(1,"rgba(120,80,220,0)");
+  ctx.fillStyle=gwell;ctx.beginPath();ctx.arc(sx,sy,gr,0,TAU());ctx.fill();
+  ctx.strokeStyle="rgba(160,120,255,.25)";ctx.lineWidth=1;
+  ctx.beginPath();ctx.arc(sx,sy,gr,0,TAU());ctx.stroke();
+  const cg=ctx.createRadialGradient(sx,sy,mr*.2,sx,sy,mr*1.8);
+  cg.addColorStop(0,STAGES[G.stage].col);
+  cg.addColorStop(.5,"rgba(120,60,200,.5)");
+  cg.addColorStop(1,"rgba(0,0,0,0)");
+  ctx.fillStyle=cg;ctx.beginPath();ctx.arc(sx,sy,mr*1.8,0,TAU());ctx.fill();
+  ctx.fillStyle="#000";ctx.beginPath();ctx.arc(sx,sy,mr,0,TAU());ctx.fill();
+  ctx.strokeStyle=STAGES[G.stage].col;ctx.lineWidth=2;
+  ctx.beginPath();ctx.arc(sx,sy,mr,0,TAU());ctx.stroke();
+  ctx.globalAlpha=1;
+}
+
+function drawBackdrop(c0,c1){
+  const bg=ctx.createRadialGradient(W/2,H*.4,0,W/2,H*.4,Math.max(W,H));
+  bg.addColorStop(0,c0);bg.addColorStop(1,c1);
+  ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+}
+
+function render(){
+  const st=STAGES[G.stage];
+  drawBackdrop(st.bg[0],st.bg[1]);
+  for(const s of stars){
+    const px=((s.x*W-G.cam.x*s.z*0.05)%W+W)%W;
+    const py=((s.y*H-G.cam.y*s.z*0.05)%H+H)%H;
+    ctx.globalAlpha=s.z*0.8;ctx.fillStyle="#fff";
+    ctx.fillRect(px,py,s.s,s.s);
+  }
+  ctx.globalAlpha=1;
+  for(const o of G.objs)drawObj(o);
+  drawMaw();
+  for(const p of G.particles){
+    const s=w2s(p.x,p.y);
+    ctx.globalAlpha=Math.max(0,p.life);ctx.fillStyle=p.c;
+    ctx.beginPath();ctx.arc(s[0],s[1],2.5*G.cam.zoom+1,0,TAU());ctx.fill();
+  }
+  ctx.globalAlpha=1;
+  // dark-matter vignette
+  if(G.fog>0.01){
+    const v=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*0.08,W/2,H/2,Math.max(W,H)*0.7);
+    v.addColorStop(0,'rgba(8,3,16,'+(G.fog*0.30)+')');
+    v.addColorStop(1,'rgba(8,3,16,'+(G.fog*0.88)+')');
+    ctx.fillStyle=v;ctx.fillRect(0,0,W,H);
+  }
+}
+
+// ---- Main loop (single rAF driver; the original had two, in a block
+//      that never parsed) ----
+let last=performance.now();
+function loop(now){
+  let dt=(now-last)/1000;last=now;
+  if(dt>0.05)dt=0.05;
+  if(dt<0)dt=0;
+  if(G.running){
+    if(!G.paused&&!G.over)update(dt);
+    render();
+  } else {
+    drawBackdrop("#160a2e","#05030c");
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+})();
+</script>
+</body>
+</html>

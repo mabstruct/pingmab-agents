@@ -9,6 +9,22 @@ from crewai.tools import tool
 
 HERENOW_BASE_URL = "https://here.now"
 PROJECT_ROOT = Path(__file__).parents[3]
+MAX_PUBLISH_FILES = 1000
+EXCLUDED_DIR_NAMES = {
+    ".git",
+    ".venv",
+    "venv",
+    "node_modules",
+    "__pycache__",
+    ".cursor",
+    ".idea",
+    ".pytest_cache",
+    "dist",
+    "build",
+    ".mypy_cache",
+    ".ruff_cache",
+}
+PREFERRED_GAME_FILES = ("index.html", "game_development.html")
 
 
 def _load_api_key() -> str | None:
@@ -37,6 +53,27 @@ def _resolve_source(path: str) -> Path:
     return source
 
 
+def _is_excluded(path: Path, root: Path) -> bool:
+    return any(part in EXCLUDED_DIR_NAMES for part in path.relative_to(root).parts)
+
+
+def _collect_directory_files(source: Path) -> list[tuple[str, Path]]:
+    pairs = [
+        (file.relative_to(source).as_posix(), file)
+        for file in sorted(source.rglob("*"))
+        if file.is_file() and not _is_excluded(file, source)
+    ]
+    if not pairs:
+        raise ValueError(f"No deployable files found in directory: {source}")
+    if len(pairs) > MAX_PUBLISH_FILES:
+        raise ValueError(
+            f"Too many files to publish ({len(pairs)} > {MAX_PUBLISH_FILES}). "
+            "Pass the game's HTML file path directly, e.g. "
+            "output/{game_title}/game_development.html"
+        )
+    return pairs
+
+
 def _collect_publish_files(source: Path) -> list[tuple[str, Path]]:
     if source.is_file():
         if source.suffix.lower() == ".html":
@@ -44,14 +81,18 @@ def _collect_publish_files(source: Path) -> list[tuple[str, Path]]:
         return [(source.name, source)]
 
     if source.is_dir():
-        pairs = [
-            (file.relative_to(source).as_posix(), file)
-            for file in sorted(source.rglob("*"))
-            if file.is_file()
-        ]
-        if not pairs:
-            raise ValueError(f"No files found in directory: {source}")
-        return pairs
+        for preferred_name in PREFERRED_GAME_FILES:
+            preferred_path = source / preferred_name
+            if preferred_path.is_file():
+                return [("index.html", preferred_path)]
+
+        if source.resolve() == PROJECT_ROOT.resolve():
+            raise ValueError(
+                "Refusing to publish the entire project directory. "
+                "Pass the game HTML file, e.g. output/{game_title}/game_development.html"
+            )
+
+        return _collect_directory_files(source)
 
     raise ValueError(f"Unsupported artifact path: {source}")
 

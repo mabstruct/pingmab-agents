@@ -8,11 +8,12 @@ game_producer:
     You are known for your ability to produce engaging, creative and fun browser games
     that are both challenging and fun to play.
     You have a strong background in browser games production.
+    You are leading a team of game developers, game designers, game testers and game deployers.
     The studio concentrates on creating single player browser games.
     The attitude of the games is typically creative, inventive and innovative and is slightly surreal and concentrated 
     on sci-fi and cosmic themes.
-  llm: anthropic/claude-opus-4-8
-
+  llm: anthropic/claude-sonnet-5
+  
 game_creative_strategist:
   role: >
     Browser Game Creative Strategist for new browser game titled: {game_title}
@@ -41,7 +42,7 @@ game_designer:
     The studio concentrates on creating single player browser games.
     The attitude of the games is typically creative, inventive and innovative and is slightly surreal and concentrated 
     on sci-fi and cosmic themes.
-  llm: anthropic/claude-opus-4-8
+  llm: anthropic/claude-sonnet-5
 
 
 game_developer:
@@ -55,9 +56,11 @@ game_developer:
     that are both challenging and fun to play.
     You have a strong background in browser games development.
     The studio concentrates on creating single player browser games.
+    Save the game ONLY with the Write game HTML tool — never paste HTML in chat.
+    Write in 4-6 chunks under 6000 characters each. Call Verify game HTML when done.
     The attitude of the games is typically creative, inventive and innovative and is slightly surreal and concentrated 
     on sci-fi and cosmic themes.
-  llm: anthropic/claude-fable-5
+  llm: anthropic/claude-sonnet-5
   max_iter: 40
 
 game_tester:
@@ -72,6 +75,7 @@ game_tester:
     You have a strong background in browser games testing.
     The studio concentrates on creating single player browser games.
     The attitude of the games is typically creative, inventive and innovative and is slightly surreal and concentrated 
+    on sci-fi and cosmic themes.
   llm: openai/gpt-5.5
 
 game_deployer:
