@@ -43,12 +43,102 @@ def train():
 def replay():
     """
     Replay the crew execution from a specific task.
+    Optional second argument: game_title (e.g. "The Big Swallow").
     """
-    try:
-        Mabstructgamesstudio().crew().replay(task_id=sys.argv[1])
+    import os
 
+    from mabstructgamesstudio.tools.game_context import (
+        load_persisted_game_title,
+        resolve_game_title,
+        set_game_title,
+    )
+
+    try:
+        task_id = sys.argv[1]
+        inputs = None
+
+        if len(sys.argv) > 2:
+            inputs = {"game_title": sys.argv[2]}
+        elif os.getenv("GAME_TITLE"):
+            inputs = {"game_title": os.environ["GAME_TITLE"]}
+        else:
+            persisted = load_persisted_game_title()
+            if persisted:
+                inputs = {"game_title": persisted}
+
+        if inputs and inputs.get("game_title"):
+            set_game_title(str(inputs["game_title"]))
+        else:
+            resolve_game_title()
+
+        Mabstructgamesstudio().crew().replay(task_id=task_id, inputs=inputs)
+
+    except ValueError as e:
+        if "not found in the crew's tasks" in str(e):
+            raise Exception(
+                f"{e}\n\nThat task ID is from an older run. "
+                "List current IDs with: crewai log-tasks-outputs\n"
+                'Deploy without replay: uv run deploy_game "The Big Swallow"'
+            ) from e
+        raise Exception(f"An error occurred while replaying the crew: {e}") from e
     except Exception as e:
-        raise Exception(f"An error occurred while replaying the crew: {e}")
+        raise Exception(f"An error occurred while replaying the crew: {e}") from e
+
+
+def deploy_game():
+    """
+    Run tests, check the deployment gate, and publish to here.now.
+    Usage: deploy_game ["The Big Swallow"]
+    """
+    import os
+
+    from mabstructgamesstudio.tools.game_context import (
+        require_game_title,
+        resolve_game_title,
+        set_game_title,
+    )
+    from mabstructgamesstudio.tools.here_now_tool import deploy_to_here_now
+    from mabstructgamesstudio.tools.telegram_tool import send_telegram_message
+    from mabstructgamesstudio.tools.test_game_tool import (
+        check_deployment_gate,
+        run_game_tests,
+    )
+
+    try:
+        if len(sys.argv) > 1:
+            set_game_title(sys.argv[1])
+        elif os.getenv("GAME_TITLE"):
+            set_game_title(os.environ["GAME_TITLE"])
+        elif not resolve_game_title():
+            raise Exception(
+                'Provide a game title: uv run deploy_game "The Big Swallow"'
+            )
+
+        title = require_game_title()
+        print(f"Game: {title}")
+        print(run_game_tests.run())
+        gate = check_deployment_gate.run()
+        print(gate)
+        if not gate.startswith("DEPLOY ALLOWED"):
+            raise Exception("Deployment gate is blocked.")
+
+        artifact = f"output/{title}/index.html"
+        deploy_result = deploy_to_here_now.run(
+            artifact_path=artifact,
+            game_title=title,
+        )
+        print(deploy_result)
+
+        if deploy_result.startswith("Deployed to"):
+            site_url = deploy_result.splitlines()[0].replace("Deployed to ", "").strip()
+            message = (
+                f"{title} playtest build is ready: {site_url}\n"
+                "Gate: pass. Temporary here.now site."
+            )
+            print(send_telegram_message.run(message=message))
+    except Exception as e:
+        raise Exception(f"An error occurred while deploying the game: {e}") from e
+
 
 def test():
     """

@@ -14,8 +14,15 @@ mabstructgamesstudio = "mabstructgamesstudio.main:run"
 run_crew = "mabstructgamesstudio.main:run"
 train = "mabstructgamesstudio.main:train"
 replay = "mabstructgamesstudio.main:replay"
+deploy_game = "mabstructgamesstudio.main:deploy_game"
 test = "mabstructgamesstudio.main:test"
 run_with_trigger = "mabstructgamesstudio.main:run_with_trigger"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mabstructgamesstudio"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/mabstructgamesstudio/scripts" = "mabstructgamesstudio/scripts"
 
 [build-system]
 requires = ["hatchling"]

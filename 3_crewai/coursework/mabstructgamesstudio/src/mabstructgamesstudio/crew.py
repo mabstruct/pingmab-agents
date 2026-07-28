@@ -4,9 +4,11 @@ from crewai.agents.agent_builder.base_agent import BaseAgent
 from crewai_tools import TavilySearchTool
 from pydantic import BaseModel, Field
 
+from .tools.game_context import set_game_title
 from .tools.here_now_tool import deploy_to_here_now
 from .tools.telegram_tool import send_telegram_message
-from .tools.write_game_html_tool import set_game_title, verify_game_html, write_game_html
+from .tools.test_game_tool import check_deployment_gate, run_game_tests
+from .tools.write_game_html_tool import verify_game_html, write_game_html_part
 
 
 class GameConceptBrief(BaseModel):
@@ -76,7 +78,7 @@ class Mabstructgamesstudio():
             llm=LLM(model="anthropic/claude-opus-4-8", max_tokens=64000, timeout=900),
             verbose=True,
             allow_delegation=False,
-            tools=[write_game_html, verify_game_html],
+            tools=[write_game_html_part, verify_game_html],
         )
 
     @agent
@@ -85,6 +87,7 @@ class Mabstructgamesstudio():
             config=self.agents_config['game_tester'], # type: ignore[index]
             verbose=True,
             allow_delegation=False,
+            tools=[run_game_tests],
         )
 
     @agent
@@ -93,7 +96,7 @@ class Mabstructgamesstudio():
             config=self.agents_config['game_deployer'], # type: ignore[index]
             verbose=True,
             allow_delegation=False,
-            tools=[deploy_to_here_now, send_telegram_message],
+            tools=[check_deployment_gate, deploy_to_here_now, send_telegram_message],
         )
 
     @task

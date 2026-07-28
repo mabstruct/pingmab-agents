@@ -1,10 +1,13 @@
 game_production_task:
   description: >
     Write the final production report for the browser game titled: {game_title}.
-    Review the ideation, design, development, testing, and deployment outputs from prior tasks.
-    Summarize what was produced, the live playtest URL if deployed, and the final ship status.
+    Review ideation, design, development, testing, and deployment outputs.
+    Include gate evidence: game_testing.json overall status, tier0/tier1 results,
+    and what was NOT verified (visual feel, touch input, real browser).
+    Distinguish implemented MVP features from deferred scope.
   expected_output: >
-    A new browser game titled: {game_title} has been produced and been deployed.
+    Production report with ship status, live URL if deployed, gate summary,
+    known issues, and explicit not-verified list.
   agent: game_producer
   output_file: output/{game_title}/game_production.md
   markdown: true
@@ -13,60 +16,60 @@ game_ideation_task:
   description: >
     Create a new innovative and engaging game idea for a browser game titled: {game_title}
     You are allowed to use any tools available to you to help you create the game idea.
-    You should return a game concept brief in markdown format.
-    Eventually you will be asked for a number of ideas.
-    You should then return a list of game concept briefs in markdown format.
+    Scope for a single self-contained HTML5 Canvas file — no server, no build step.
+    Flag features that are ambitious for one HTML file vs realistic MVP.
   expected_output: >
-    A game concept brief to be given to the game designer. It should include:
-    - Game title and sub title
-    - a short idea description in 2 to 3 sentences.
-    - description of the core idea
-    - a list of key features and mechanics
-    - breakdown of the game mechanics and features
-    - reason why this works as a browser game
-    - a list of key music and sound elements
-    - a reasoning why this works as a browser game for the studio
+    A game concept brief in markdown with:
+    - Game title and subtitle
+    - Short idea description (2-3 sentences)
+    - Core idea and key mechanics
+    - MVP features (must ship in v1)
+    - Stretch features (defer if needed)
+    - Why this works as a browser game
+    - Key audio/visual direction (note if audio may be deferred)
   agent: game_creative_strategist
   output_file: output/{game_title}/game_ideation.md
   markdown: true
 
-
 game_design_task:
   description: >
     Design a browser game titled: {game_title}
-    An ideation document has been provided to you. Use it to help you design the game.
-    You should return a game design in markdown format.
+    An ideation document has been provided. Use it to help you design the game.
+    Right-size the design for a single HTML file with one inline <script> block.
+    Define a playability contract: machine-checkable statements the build must satisfy.
   expected_output: >
-    A game design. It should include:
-    - Game title
-    - a short idea description in 2 to 3 sentences.
-    - description of the core idea
-    - breakdown of the game mechanics and features
-    - breakdown of the game art and design
+    A game design in markdown with:
+    - Game title and short description
+    - Core mechanics and art direction
+    - MVP scope (features shipping in v1)
+    - Deferred scope (explicitly cut from v1)
+    - Playability contract (8-10 checkable items, e.g. boot, controls, core loop,
+      progression, death/recovery, restart, win/terminal state)
+    - Test hooks to implement (?test flag, update/render split, seeded RNG if feasible)
   agent: game_designer
   output_file: output/{game_title}/game_design.md
   context:
     - game_ideation_task
   markdown: true
 
-
 game_development_task:
   description: >
-    Develop a browser game titled: {game_title}
-    A game design has been provided to you. Use it to help you develop the game.
-    Build a complete, playable single-file HTML5 Canvas game (inline CSS + vanilla JS).
-    IMPORTANT: Do NOT paste HTML in your final answer — it will be truncated.
-    Save the game ONLY with the Write game HTML tool (game_title is automatic).
-    Write in 4-6 small chunks (each under 6000 characters):
-    (1) mode=overwrite: <!DOCTYPE html> through core init/state,
-    (2+) mode=append: level gen, physics, rendering, input, main loop,
-    (last) mode=append: closing </script></body></html>.
-    If a write is rejected for empty/oversized content, split smaller — never call the tool with no arguments.
-    After all chunks, call Verify game HTML once. If incomplete, rewrite from scratch with overwrite.
-    Your final answer must be a short confirmation only (path, byte size, verification status).
-    Do NOT overwrite index.html — that file is written exclusively by the tool.
+    Develop a browser game titled: {game_title} from the design doc.
+    Build a complete single-file HTML5 Canvas game (inline CSS + vanilla JS).
+    Architecture requirements:
+    - Exactly ONE inline <script> block for all JavaScript (never append new <script> tags)
+    - Separate update(dt, state) from render(state) where possible
+    - Multiply physics by dt (frame-rate independent)
+    - Implement MVP scope only; list deferred items honestly in your report
+    Writing (use Write game HTML part tool only — never paste HTML in chat):
+    1. part=start: <!DOCTYPE html> through opening <script> (no </script> or </html> yet)
+    2. part=js: raw JavaScript chunks only (repeat 4-8 times, each under 6000 chars)
+    3. part=end: final JS plus </script></body></html> — this writes the file
+    After part=end, call Verify game HTML. If Tier-0 FAIL, rewrite from part=start.
+    Final answer: short confirmation with path, byte size, Tier-0 status, MVP vs deferred list.
   expected_output: >
-    Short confirmation that output/{game_title}/index.html was written and Verify game HTML reports complete.
+    Short confirmation that index.html was written, Tier-0 validation passed,
+    and which design features were implemented vs deferred.
   agent: game_developer
   output_file: output/{game_title}/game_development.md
   markdown: true
@@ -75,35 +78,39 @@ game_development_task:
 
 game_testing_task:
   description: >
-    Test a browser game titled: {game_title}
-    A playable html browser game was developed. Test it and report on any bugs and issues found. 
-    The browser game is in the output/{game_title} directory as index.html
-    You should return a game testing document in markdown format.
+    Test the browser game titled: {game_title} at output/{game_title}/index.html.
+    You MUST call Run game tests first — it writes output/{game_title}/game_testing.json.
+    Do NOT describe gameplay you did not observe. If overall=fail, report BLOCKED.
+    Interpret the JSON artifact only: tier0/tier1 issues, boot click results.
+    Compare results against the playability contract in game_design.md.
+    Write game_testing.md summarizing JSON results, contract coverage, and bugs found.
   expected_output: >
-    a report on the game testing. It should include:
-    - a list of bugs and issues found
+    Markdown test report referencing game_testing.json. Must include:
+    - overall pass/fail from JSON (not invented)
+    - tier0 and tier1 results
+    - playability contract items verified/unverified/blocked
+    - bugs with evidence from test output
+    If tests failed, state BLOCKED — do not claim the game is playable.
   agent: game_tester
   output_file: output/{game_title}/game_testing.md
   markdown: true
   context:
+    - game_design_task
     - game_development_task
 
 game_deployment_task:
   description: >
-    Deploy the browser game titled: {game_title} to a temporary here.now site for playtesting.
-    The game artifact is the HTML file at output/{game_title}/index.html.
-    First use the Deploy to here.now tool with that exact HTML file path (not a folder or project root)
-    and pass the game title.
-    Then use the Send Telegram Message tool to notify the studio lead that the game is ready for testing,
-    including the live here.now URL and whether the site is temporary.
+    Deploy the browser game titled: {game_title} ONLY if tests passed.
+    First call Check deployment gate — proceed only if it returns DEPLOY ALLOWED.
+    If DEPLOY BLOCKED, stop and report why; do not deploy or send Telegram.
+    When allowed, deploy output/{game_title}/index.html via Deploy to here.now,
+    then notify via Send Telegram Message with the live URL.
   expected_output: >
-    A game deployment report in markdown. It should include:
-    - the live here.now URL
-    - whether the site is temporary (24h) or permanent
-    - confirmation that a Telegram message was sent
-    - the claim URL if the site is anonymous
+    Deployment report with gate status, live here.now URL if deployed,
+    temporary/permanent status, claim URL if anonymous, Telegram confirmation.
+    If gate blocked, report blocked status and do not claim deployment succeeded.
   agent: game_deployer
   output_file: output/{game_title}/game_deployment.md
   markdown: true
   context:
-    - game_development_task
+    - game_testing_task

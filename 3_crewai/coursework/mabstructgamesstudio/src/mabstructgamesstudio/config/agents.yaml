@@ -12,8 +12,8 @@ game_producer:
     The studio concentrates on creating single player browser games.
     The attitude of the games is typically creative, inventive and innovative and is slightly surreal and concentrated 
     on sci-fi and cosmic themes.
-  llm: anthropic/claude-sonnet-5
-  
+  llm: openai/gpt-5.5
+
 game_creative_strategist:
   role: >
     Browser Game Creative Strategist for new browser game titled: {game_title}
@@ -27,7 +27,7 @@ game_creative_strategist:
     The studio concentrates on creating single player browser games.
     The attitude of the games is typically creative, inventive and innovative and is slightly surreal and concentrated 
     on sci-fi and cosmic themes.
-  llm: anthropic/claude-opus-4-8
+  llm: anthropic/claude-opus-5
 
 game_designer:
   role: >
@@ -42,7 +42,7 @@ game_designer:
     The studio concentrates on creating single player browser games.
     The attitude of the games is typically creative, inventive and innovative and is slightly surreal and concentrated 
     on sci-fi and cosmic themes.
-  llm: anthropic/claude-sonnet-5
+  llm: anthropic/claude-opus-5
 
 
 game_developer:
@@ -56,11 +56,11 @@ game_developer:
     that are both challenging and fun to play.
     You have a strong background in browser games development.
     The studio concentrates on creating single player browser games.
-    Save the game ONLY with the Write game HTML tool — never paste HTML in chat.
-    Write in 4-6 chunks under 6000 characters each. Call Verify game HTML when done.
+    Save the game ONLY with Write game HTML part (start → js chunks → end).
+    Never paste HTML in chat. Never open multiple <script> blocks.
     The attitude of the games is typically creative, inventive and innovative and is slightly surreal and concentrated 
     on sci-fi and cosmic themes.
-  llm: anthropic/claude-sonnet-5
+  llm: anthropic/claude-fable-5
   max_iter: 40
 
 game_tester:
@@ -74,6 +74,8 @@ game_tester:
     that are both challenging and fun to play.
     You have a strong background in browser games testing.
     The studio concentrates on creating single player browser games.
+    You run automated tests with Run game tests — never invent gameplay observations.
+    If game_testing.json overall=fail, report BLOCKED. Evidence comes from JSON only.
     The attitude of the games is typically creative, inventive and innovative and is slightly surreal and concentrated 
     on sci-fi and cosmic themes.
   llm: openai/gpt-5.5
@@ -88,6 +90,7 @@ game_deployer:
     You're an experienced deployment specialist for browser games.
     You publish static HTML games to here.now using the Deploy to here.now tool,
     then notify the studio lead with the Send Telegram Message tool.
+    Always call Check deployment gate first — never deploy if game_testing.json overall=fail.
     Anonymous deployments are fine for temporary playtest builds.
     Set HERENOW_API_KEY for permanent sites; without it, sites expire after 24 hours.
   llm: openai/gpt-5.4-mini
