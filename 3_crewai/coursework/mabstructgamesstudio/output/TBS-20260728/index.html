@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Big Swallow</title>
+<style>
+  html,body{margin:0;padding:0;background:#05060b;overflow:hidden;height:100%;}
+  #game{display:block;width:100vw;height:100vh;cursor:crosshair;background:#05060b;}
+  #ui{position:fixed;top:10px;left:10px;color:#b06cff;font-family:'Courier New',monospace;
+      font-size:13px;text-shadow:0 0 6px #54e6ff;pointer-events:none;line-height:1.5;}
+  #overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+      flex-direction:column;color:#54e6ff;font-family:'Courier New',monospace;text-align:center;
+      background:rgba(5,6,11,0.82);z-index:10;}
+  #overlay h1{color:#b06cff;font-size:44px;letter-spacing:6px;text-shadow:0 0 16px #b06cff;margin:0 0 8px;}
+  #overlay p{max-width:520px;line-height:1.6;font-size:14px;color:#9fb;}
+  .btn{margin-top:20px;padding:12px 30px;border:2px solid #b06cff;color:#54e6ff;background:transparent;
+      font-family:'Courier New',monospace;font-size:16px;letter-spacing:3px;cursor:pointer;
+      pointer-events:auto;text-shadow:0 0 8px #54e6ff;}
+  .btn:hover{background:#b06cff33;}
+  .card{display:inline-block;margin:8px;padding:14px 18px;border:2px solid #54e6ff88;width:200px;
+      vertical-align:top;pointer-events:auto;cursor:pointer;background:#0a0e18;text-align:left;}
+  .card:hover{border-color:#b06cff;background:#141a2c;}
+  .card b{color:#b06cff;display:block;margin-bottom:6px;letter-spacing:1px;}
+  .card span{color:#9fb;font-size:12px;line-height:1.5;}
+  #cards{display:flex;flex-wrap:wrap;justify-content:center;max-width:700px;}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="ui"></div>
+<div id="overlay">
+  <h1>THE BIG SWALLOW</h1>
+  <p><i>An appetite at the end of everything.</i><br><br>
+  You are the Maw. <b>Hold LMB</b> (or Z/K) to inhale things smaller than your gape.
+  Swallowing fills your <b>Gut</b>. <b>RMB / Space / X</b> belches the oldest lump out to move you —
+  no gut, no movement. Grow to Fold the world into new scales. Beware The Other Mouth.</p>
+  <button class="btn" id="startBtn">BEGIN</button>
+</div>
+<script>
+'use strict';
+// ===================== The Big Swallow =====================
+const cv = document.getElementById('game');
+const ctx = cv.getContext('2d');
+const uiEl = document.getElementById('ui');
+const overlay = document.getElementById('overlay');
+let W=0,H=0;
+function resize(){ W=cv.width=innerWidth; H=cv.height=innerHeight; }
+addEventListener('resize',resize); resize();
+
+// ---- constants ----
+const GAPE_ANGLE = 34*Math.PI/180;
+const GAPE_RATIO = 0.62;
+const SUCK_K = 90000;
+const EJECT_K = 340;
+const MAX_BELCH_DV = 420;
+const TIER_FLOOR = [0, 4, 40, 400];      // floor mass per tier (1-based)
+const TIER_GOAL  = [0, 40, 400, 2600];   // reach -> fold to next
+const TIER3_MASS_GOAL = TIER_GOAL[3];
+const WELL_MASS = 260;
+const G_CONST = 5200;
+
+// ---- rng ----
+let seed = 1337;
+function rand(){ seed=(seed*1664525+1013904223)>>>0; return seed/4294967296; }
+function rr(a,b){ return a+(b-a)*rand(); }
+
+// ---- input ----
+const mouse={x:0,y:0,down:false};
+const keys={};
+let inhaleHeld=false, belchQueued=false, panicQueued=false;
+let lastBelchTap=0;
+
+cv.addEventListener('mousemove',e=>{ mouse.x=e.clientX; mouse.y=e.clientY; });
+cv.addEventListener('mousedown',e=>{
+  ensureAudio();
+  if(e.button===0){ inhaleHeld=true; }
+  if(e.button===2){ queueBelch(); }
+});
+addEventListener('mouseup',e=>{ if(e.button===0) inhaleHeld=false; });
+cv.addEventListener('contextmenu',e=>e.preventDefault());
+addEventListener('keydown',e=>{
+  ensureAudio();
+  const k=e.key.toLowerCase();
+  keys[k]=true;
+  if(k==='z'||k==='k') inhaleHeld=true;
+  if(k===' '||k==='x'){ e.preventDefault(); queueBelch(); }
+  if(k==='shift') panicQueued=true;
+});
+addEventListener('keyup',e=>{
+  const k=e.key.toLowerCase();
+  keys[k]=false;
+  if(k==='z'||k==='k') inhaleHeld=false;
+});
+function queueBelch(){
+  const now=performance.now();
+  if(now-lastBelchTap<260){ panicQueued=true; }
+  lastBelchTap=now;
+  belchQueued=true;
+}
+
+// ---- world / camera ----
+const cam={x:0,y:0,zoom:1,targetZoom:1};
+let worldR = 1400;
+// ---- audio ----
+let AC=null, master=null;
+function ensureAudio(){
+  if(AC) return;
+  try{
+    AC=new (window.AudioContext||window.webkitAudioContext)();
+    master=AC.createGain(); master.gain.value=0.35; master.connect(AC.destination);
+  }catch(e){ AC=null; }
+}
+let inhaleNode=null, inhaleFilt=null, inhaleGain=null;
+function startInhaleSound(){
+  if(!AC||inhaleNode) return;
+  const buf=AC.createBuffer(1,AC.sampleRate*2,AC.sampleRate);
+  const d=buf.getChannelData(0); let last=0;
+  for(let i=0;i<d.length;i++){ const w=Math.random()*2-1; last=(last+0.02*w)/1.02; d[i]=last*3.5; }
+  inhaleNode=AC.createBufferSource(); inhaleNode.buffer=buf; inhaleNode.loop=true;
+  inhaleFilt=AC.createBiquadFilter(); inhaleFilt.type='lowpass'; inhaleFilt.frequency.value=300;
+  inhaleGain=AC.createGain(); inhaleGain.gain.value=0.0;
+  inhaleNode.connect(inhaleFilt); inhaleFilt.connect(inhaleGain); inhaleGain.connect(master);
+  inhaleNode.start();
+}
+function stopInhaleSound(){
+  if(inhaleNode){ try{inhaleNode.stop();}catch(e){} inhaleNode=null; }
+}
+function beep(freq,dur,type,vol){
+  if(!AC) return;
+  const o=AC.createOscillator(), g=AC.createGain();
+  o.type=type||'sine'; o.frequency.value=freq;
+  g.gain.value=vol||0.2; g.gain.exponentialRampToValueAtTime(0.0001,AC.currentTime+dur);
+  o.connect(g); g.connect(master); o.start(); o.stop(AC.currentTime+dur);
+}
+function noiseBurst(f0,f1,dur){
+  if(!AC) return;
+  const buf=AC.createBuffer(1,AC.sampleRate*dur,AC.sampleRate);
+  const d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+  const n=AC.createBufferSource(); n.buffer=buf;
+  const bp=AC.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=f0;
+  bp.frequency.exponentialRampToValueAtTime(f1,AC.currentTime+dur);
+  const g=AC.createGain(); g.gain.value=0.35; g.gain.exponentialRampToValueAtTime(0.0001,AC.currentTime+dur);
+  n.connect(bp); bp.connect(g); g.connect(master); n.start(); n.stop(AC.currentTime+dur);
+}
+function foldSweep(){
+  if(!AC) return;
+  const o=AC.createOscillator(), g=AC.createGain();
+  o.type='sine'; o.frequency.value=440;
+  o.frequency.exponentialRampToValueAtTime(110,AC.currentTime+1.5);
+  g.gain.value=0.0; g.gain.linearRampToValueAtTime(0.3,AC.currentTime+0.2);
+  g.gain.exponentialRampToValueAtTime(0.0001,AC.currentTime+1.6);
+  o.connect(g); g.connect(master); o.start(); o.stop(AC.currentTime+1.7);
+}
+
+// ---- glow sprites ----
+const glowCache={};
+function makeGlow(size,col){
+  const key=size+col;
+  if(glowCache[key]) return glowCache[key];
+  const c=document.createElement('canvas'); c.width=c.height=size;
+  const g=c.getContext('2d');
+  const grd=g.createRadialGradient(size/2,size/2,0,size/2,size/2,size/2);
+  grd.addColorStop(0,col); grd.addColorStop(1,'rgba(0,0,0,0)');
+  g.fillStyle=grd; g.fillRect(0,0,size,size);
+  glowCache[key]=c; return c;
+}
+function drawGlow(x,y,r,col,alpha){
+  const spr=makeGlow(128,col);
+  ctx.globalAlpha=alpha; ctx.globalCompositeOperation='lighter';
+  ctx.drawImage(spr,x-r,y-r,r*2,r*2);
+  ctx.globalCompositeOperation='source-over'; ctx.globalAlpha=1;
+}
+
+// ---- polygon shape helper ----
+function makeShape(r){
+  const n=8+Math.floor(rand()*7); const pts=[];
+  for(let i=0;i<n;i++){
+    const a=i/n*Math.PI*2;
+    const rr2=r*(0.82+rand()*0.36);
+    pts.push({a,r:rr2});
+  }
+  return pts;
+}
+// ---- archetypes ----
+// tier: which tier they belong to. color, size range, digest, yields
+const ARCH={
+  dust:     {tier:1,col:'#e8e6dd',rim:'#fff',sr:[0.6,1.4],dt:1.0,my:0.4,ey:1,hard:0.2},
+  iceGrain: {tier:1,col:'#a9d8ff',rim:'#dff',sr:[0.9,1.8],dt:1.4,my:0.7,ey:2,hard:0.3},
+  asteroid: {tier:2,col:'#c79a5b',rim:'#e8c48a',sr:[3,8],dt:2.6,my:5,ey:4,hard:0.6},
+  probe:    {tier:2,col:'#6a8f6a',rim:'#9fdc9f',sr:[2.5,5],dt:2.0,my:3.5,ey:8,hard:0.5},
+  comet:    {tier:2,col:'#cfe9ff',rim:'#fff',sr:[3,6],dt:2.2,my:4,ey:6,hard:0.3,comet:true},
+  moon:     {tier:3,col:'#8a7d6e',rim:'#c9b8a3',sr:[16,34],dt:5.0,my:60,ey:20,hard:0.9,moon:true},
+};
+const TIER_ARCH=[[], ['dust','iceGrain'], ['dust','iceGrain','asteroid','probe','comet'],
+                 ['asteroid','probe','comet','moon']];
+
+// ---- state ----
+let bodies=[], particles=[], dust=[];
+let player, other;
+let currentTier=1;
+let essence=0;
+let running=false, gameOver=false, win=false;
+let folding=false, foldT=0, foldFrom=1, foldTo=1, foldWhite=0;
+let flash=0;
+let mutationPending=false, mutationChoices=[];
+let ownedMut={};
+
+const MUTS=[
+  {id:'stomach',name:'Second Stomach',desc:'+3 gut slots.'},
+  {id:'barbed',name:'Barbed Throat',desc:'Digest x1.4 speed, belch thrust x0.75.'},
+  {id:'lip',name:'Prehensile Lip',desc:'Cone angle x1.3, range x0.8.'},
+  {id:'iron',name:'Iron Lining',desc:'Rupture threshold 0.75->0.92, -10% void regen.'},
+  {id:'retch',name:'Retch Reflex',desc:'One free Panic Eject/tier: x2.2 thrust, no mass loss.'},
+  {id:'ache',name:'Sympathetic Ache',desc:'Cone bodies pre-digest 30% before swallow.'},
+];
+
+function newBody(type,x,y,vx,vy,rOverride){
+  const a=ARCH[type];
+  const r=rOverride||rr(a.sr[0],a.sr[1]);
+  return {
+    type,x,y,vx:vx||0,vy:vy||0,radius:r,mass:r*r*0.5,
+    col:a.col,rim:a.rim,shape:makeShape(r),
+    rot:rand()*6.28,vr:rr(-0.4,0.4),
+    comet:a.comet,moon:a.moon,alive:true,
+    predigest:0
+  };
+}
+
+function makePlayer(){
+  const m=6;
+  return {
+    x:0,y:0,vx:0,vy:0,mass:m,radius:Math.sqrt(m/0.5),
+    charge:100,gut:[],baseSlots:6,
+    lockout:0,invuln:0,stun:0,wob:0,
+    inhaling:false,idleT:0,retchUsed:false
+  };
+}
+function playerSlots(){ return player.baseSlots + (ownedMut.stomach?3:0); }
+function ruptureThresh(){ return ownedMut.iron?0.92:0.75; }
+function updatePlayerRadius(){ player.radius=Math.sqrt(player.mass/0.5); }
+
+function makeOther(pm){
+  const m=pm*rr(0.7,1.0);
+  const r=Math.sqrt(m/0.5);
+  const ang=rand()*6.28, dd=worldR*0.7;
+  return {
+    x:Math.cos(ang)*dd,y:Math.sin(ang)*dd,vx:0,vy:0,
+    mass:m,radius:r,state:'WANDER',telem:0,fsmT:0,alive:true,jaw:0
+  };
+}
+
+function spawnField(){
+  bodies=[];
+  const arche=TIER_ARCH[currentTier];
+  const count=currentTier===3?70:120;
+  for(let i=0;i<count;i++){
+    const t=arche[Math.floor(rand()*arche.length)];
+    const ang=rand()*6.28, d=rr(60,worldR);
+    const b=newBody(t,Math.cos(ang)*d,Math.sin(ang)*d);
+    b.vx=rr(-8,8); b.vy=rr(-8,8);
+    bodies.push(b);
+  }
+}
+function spawnDust(){
+  dust=[];
+  for(let i=0;i<240;i++){
+    const layer=i<80?0:i<160?1:2;
+    dust.push({x:rr(-2000,2000),y:rr(-2000,2000),
+      s:[0.15,0.35,0.6][layer],sz:layer===2?2:1,
+      col:['#223','#334','#556'][layer]});
+  }
+}
+// ---- init / reset ----
+function startGame(){
+  seed=(Date.now())>>>0;
+  currentTier=1; worldR=1400; essence=0;
+  gameOver=false; win=false; folding=false; mutationPending=false;
+  ownedMut={}; particles=[];
+  player=makePlayer(); updatePlayerRadius();
+  cam.x=0;cam.y=0;cam.zoom=1;cam.targetZoom=1;
+  spawnDust(); spawnField();
+  other=null;
+  running=true;
+  overlay.style.display='none';
+}
+
+// ---- effects ----
+function spark(x,y,col,n,spd){
+  for(let i=0;i<n;i++){
+    const a=rand()*6.28,s=rr(0.2,1)*spd;
+    particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:rr(0.3,0.8),max:0.8,col});
+  }
+}
+
+// ---- inhale / swallow logic ----
+function coneAngle(){ return GAPE_ANGLE*(ownedMut.lip?1.3:1.0); }
+function gapeRange(){ return 5.5*player.radius*(ownedMut.lip?0.8:1.0); }
+
+function doInhale(dt){
+  const aimX=cam.x+(mouse.x-W/2)/cam.zoom;
+  const aimY=cam.y+(mouse.y-H/2)/cam.zoom;
+  const dirA=Math.atan2(aimY-player.y,aimX-player.x);
+  const range=gapeRange(), half=coneAngle();
+  player.charge-=18*dt;
+  for(const b of bodies){
+    if(!b.alive) continue;
+    const dx=b.x-player.x, dy=b.y-player.y;
+    const d=Math.hypot(dx,dy);
+    if(d>range||d<1) continue;
+    let off=Math.atan2(dy,dx)-dirA;
+    while(off>Math.PI)off-=6.283; while(off<-Math.PI)off+=6.283;
+    if(Math.abs(off)>half) continue;
+    const F=SUCK_K*(1-d/range)*Math.cos(off);
+    const nx=-dx/d, ny=-dy/d;
+    b.vx+=nx*F/b.mass*dt; b.vy+=ny*F/b.mass*dt;
+    // third law on player
+    player.vx-=nx*F/player.mass*(b.mass/player.mass)*dt;
+    player.vy-=ny*F/player.mass*(b.mass/player.mass)*dt;
+    if(ownedMut.ache) b.predigest=Math.min(0.3,b.predigest+dt*0.5);
+    // swallow gate
+    if(d<player.radius*0.85){
+      if(b.radius<=player.radius*GAPE_RATIO){
+        if(player.gut.length<playerSlots()){
+          swallow(b);
+        }else{
+          // rejection burp
+          b.vx-=nx*200; b.vy-=ny*200;
+        }
+      }else{
+        // jam at lip, shove player
+        player.vx+=(dx/d)*40*dt*10; player.vy+=(dy/d)*40*dt*10;
+      }
+    }
+  }
+}
+
+function swallow(b){
+  b.alive=false;
+  const a=ARCH[b.type];
+  const pre=b.predigest||0;
+  player.gut.push({
+    type:b.type,radius:b.radius,col:b.col,rim:b.rim,shape:b.shape,
+    dt:a.dt*(ownedMut.barbed?1/1.4:1),
+    t:a.dt*(ownedMut.barbed?1/1.4:1)*(1-pre),
+    my:a.my*(b.radius/((a.sr[0]+a.sr[1])/2)),
+    ey:a.ey,mass:b.mass
+  });
+  beep(600/(b.radius+1)+120,0.15,'sine',0.25);
+  spark(b.x,b.y,'#b06cff',6,80);
+}
+
+function digest(dt){
+  for(let i=player.gut.length-1;i>=0;i--){
+    const l=player.gut[i];
+    l.t-=dt;
+    if(l.t<=0){
+      player.mass+=l.my; essence+=l.ey;
+      updatePlayerRadius();
+      player.gut.splice(i,1);
+      beep(300+rand()*100,0.2,'triangle',0.18);
+    }
+  }
+}
+
+// ---- belch ----
+function doBelch(panic){
+  if(player.gut.length===0) return;
+  const aimX=cam.x+(mouse.x-W/2)/cam.zoom;
+  const aimY=cam.y+(mouse.y-H/2)/cam.zoom;
+  const dirA=Math.atan2(aimY-player.y,aimX-player.x);
+  const count=panic?Math.min(4,player.gut.length):1;
+  const thrustMul=(ownedMut.barbed?0.75:1)*(panic&&ownedMut.retch&&!player.retchUsed?2.2:1);
+  const freeRetch=panic&&ownedMut.retch&&!player.retchUsed;
+  if(freeRetch) player.retchUsed=true;
+  for(let c=0;c<count;c++){
+    const l=player.gut.shift();
+    if(!l) break;
+    const spread=panic?(c-(count-1)/2)*0.35:0;
+    const a=dirA+Math.PI+spread; // away from cursor
+    const lm=Math.max(0.3,l.mass);
+    let dv=EJECT_K*lm/player.mass*thrustMul;
+    dv=Math.min(dv,MAX_BELCH_DV);
+    player.vx+=Math.cos(a)*dv; player.vy+=Math.sin(a)*dv;
+    // spawn body opposite
+    const bx=player.x+Math.cos(dirA)*(player.radius+l.radius+2);
+    const by=player.y+Math.sin(dirA)*(player.radius+l.radius+2);
+    const bvel=dv*player.mass/lm;
+    const nb=newBody(l.type,bx,by,Math.cos(dirA)*Math.min(bvel,600),Math.sin(dirA)*Math.min(bvel,600),l.radius);
+    bodies.push(nb);
+    if(!freeRetch && !panic) player.mass=Math.max(TIER_FLOOR[currentTier]*0.4,player.mass);
+  }
+  noiseBurst(400,120,0.25);
+  spark(player.x,player.y,'#54e6ff',10,120);
+}
+// ---- damage ----
+function damagePlayer(fracLoss,stun){
+  if(player.invuln>0) return;
+  const f=player.gut.length/playerSlots();
+  if(f>ruptureThresh()){
+    // rupture
+    const dumpN=Math.ceil(player.gut.length*0.5);
+    for(let i=0;i<dumpN;i++){
+      const l=player.gut.shift(); if(!l)break;
+      const a=rand()*6.28;
+      const nb=newBody(l.type,player.x+Math.cos(a)*player.radius,player.y+Math.sin(a)*player.radius,
+        Math.cos(a)*300,Math.sin(a)*300,l.radius);
+      bodies.push(nb);
+    }
+    player.mass*=0.88; player.stun=1.2;
+    flash=1;
+  }
+  player.mass*=(1-fracLoss);
+  player.stun=Math.max(player.stun,stun||0);
+  player.invuln=1.5;
+  updatePlayerRadius();
+  flash=Math.max(flash,0.7);
+  noiseBurst(300,80,0.3);
+  // recovery crumbs
+  for(let i=0;i<3;i++){
+    const a=rand()*6.28,d=player.radius*2.5;
+    bodies.push(newBody('iceGrain',player.x+Math.cos(a)*d,player.y+Math.sin(a)*d,0,0,player.radius*0.4));
+  }
+  checkDeath();
+}
+function checkDeath(){
+  if(player.mass<TIER_FLOOR[currentTier]*0.5){
+    gameOver=true; running=false; showEnd(false);
+  }
+}
+
+// ---- gravity wells (tier3) ----
+let wells=[];
+function recomputeWells(){
+  wells=[];
+  for(const b of bodies){
+    if(b.alive && b.mass>WELL_MASS){ wells.push(b); if(wells.length>=12) break; }
+  }
+}
+function applyGravity(dt){
+  if(currentTier<3||wells.length===0) return;
+  const targets=bodies.concat([player]);
+  for(const w of wells){
+    for(const t of targets){
+      if(t===w||!t.alive&&t!==player) continue;
+      const dx=w.x-t.x, dy=w.y-t.y;
+      const d2=Math.max(dx*dx+dy*dy,900);
+      const F=G_CONST*w.mass/d2;
+      const d=Math.sqrt(d2);
+      t.vx+=dx/d*F*dt; t.vy+=dy/d*F*dt;
+    }
+  }
+}
+
+// ---- Other Mouth FSM ----
+function updateOther(dt){
+  if(!other||!other.alive) return;
+  const o=other;
+  const dx=player.x-o.x, dy=player.y-o.y, dist=Math.hypot(dx,dy);
+  o.fsmT-=dt;
+  // transitions
+  if(player.mass>o.mass*1.25){ o.state='FLEE'; }
+  else if(o.state!=='LUNGE'){
+    if(player.mass<o.mass*1.15 && dist<900){ o.state='STALK'; }
+    else o.state='WANDER';
+  }
+  let ax=0,ay=0;
+  if(o.state==='WANDER'){
+    // drift toward densest cluster (sample)
+    let bx=0,by=0,n=0;
+    for(let i=0;i<bodies.length;i+=4){ const b=bodies[i]; if(b.alive){bx+=b.x;by+=b.y;n++;} }
+    if(n){ ax=(bx/n-o.x); ay=(by/n-o.y); }
+  } else if(o.state==='STALK'){
+    const lead=dist/300;
+    ax=(player.x+player.vx*lead)-o.x; ay=(player.y+player.vy*lead)-o.y;
+    if(dist<420 && o.fsmT<=0){ o.state='LUNGE'; o.telem=1.4; o.fsmT=3; }
+  } else if(o.state==='LUNGE'){
+    o.telem-=dt; o.jaw=Math.min(1,o.jaw+dt*2);
+    if(o.telem<=0){
+      // committed dash
+      const a=Math.atan2(dy,dx);
+      o.vx+=Math.cos(a)*280; o.vy+=Math.sin(a)*280;
+      o.state='STALK'; o.fsmT=2; o.jaw=0;
+      beep(180,0.3,'sawtooth',0.2);
+    }
+  } else if(o.state==='FLEE'){
+    ax=-(dx); ay=-(dy);
+  }
+  const al=Math.hypot(ax,ay);
+  if(al>0){ o.vx+=ax/al*60*dt; o.vy+=ay/al*60*dt; }
+  o.vx*=0.99; o.vy*=0.99;
+  o.x+=o.vx*dt; o.y+=o.vy*dt;
+  o.jaw*=0.94;
+  // Other eats food
+  for(const b of bodies){
+    if(!b.alive) continue;
+    const bd=Math.hypot(b.x-o.x,b.y-o.y);
+    if(bd<o.radius*0.9 && b.radius<=o.radius*0.62){
+      b.alive=false; o.mass+=b.mass*0.4; o.radius=Math.sqrt(o.mass/0.5);
+    }
+  }
+  // collision with player
+  if(dist<o.radius+player.radius){
+    if(player.mass>o.mass*1.25){
+      // player eats it
+      other.alive=false;
+      player.mass+=o.mass*0.25; essence+=40;
+      updatePlayerRadius();
+      spark(o.x,o.y,'#54e6ff',30,200);
+      beep(90,0.5,'sine',0.3);
+    } else if(o.state==='LUNGE'||o.telem>0.0){
+      damagePlayer(0.15,0.3);
+      const a=Math.atan2(dy,dx);
+      player.vx+=Math.cos(a)*200; player.vy+=Math.sin(a)*200;
+    }
+  }
+}
+// ---- fold / tier progression ----
+function checkFold(){
+  if(folding||mutationPending) return;
+  if(currentTier<3 && player.mass>=TIER_GOAL[currentTier]){
+    beginFold(currentTier+1);
+  } else if(currentTier===3 && player.mass>=TIER3_MASS_GOAL){
+    // The Full Stop win
+    win=true; running=false; showEnd(true);
+  }
+}
+function beginFold(toTier){
+  folding=true; foldT=0; foldFrom=cam.zoom;
+  foldTo=cam.zoom*0.45;
+  foldWhite=1;
+  foldSweep();
+  pendingTier=toTier;
+}
+let pendingTier=1;
+function easeInOutQuart(t){ return t<0.5?8*t*t*t*t:1-Math.pow(-2*t+2,4)/2; }
+
+function updateFold(dt){
+  foldT+=dt/1.5;
+  const e=easeInOutQuart(Math.min(1,foldT));
+  cam.zoom=foldFrom+(foldTo-foldFrom)*e;
+  foldWhite=1-Math.min(1,foldT);
+  if(foldT>=1){
+    folding=false;
+    currentTier=pendingTier;
+    worldR*=1.9;
+    // demote old bodies into dust (add some parallax points)
+    for(const b of bodies) if(rand()<0.5) dust.push({x:b.x*0.3,y:b.y*0.3,s:0.6,sz:2,col:'#445'});
+    spawnField();
+    if(currentTier>=2 && (!other||!other.alive)) other=makeOther(player.mass);
+    if(currentTier===3) recomputeWells();
+    player.retchUsed=false;
+    cam.zoom=1; cam.targetZoom=1;
+    // offer mutation
+    offerMutation();
+  }
+}
+
+function offerMutation(){
+  const avail=MUTS.filter(m=>!ownedMut[m.id]);
+  if(avail.length===0) return;
+  // seeded draw 3
+  const pool=avail.slice();
+  mutationChoices=[];
+  for(let i=0;i<3&&pool.length;i++){
+    const idx=Math.floor(rand()*pool.length);
+    mutationChoices.push(pool.splice(idx,1)[0]);
+  }
+  mutationPending=true; running=false;
+  showMutation();
+}
+function pickMutation(id){
+  ownedMut[id]=true;
+  mutationPending=false;
+  overlay.style.display='none';
+  running=true;
+}
+
+// ---- main update ----
+function update(dt){
+  if(!running){ if(folding) updateFold(dt); return; }
+  if(folding){ updateFold(dt); }
+
+  // charge management
+  const wasIdle = !inhaleHeld && !belchQueued && !panicQueued;
+  if(inhaleHeld && player.charge>0 && player.lockout<=0){
+    player.inhaling=true; player.idleT=0;
+  } else {
+    player.inhaling=false;
+  }
+  if(player.lockout>0) player.lockout-=dt;
+  if(player.inhaling){
+    doInhale(dt);
+    startInhaleSound();
+    if(inhaleGain) inhaleGain.gain.value=0.12;
+    if(inhaleFilt) inhaleFilt.frequency.value=300+player.charge*8;
+    if(player.charge<=0){ player.charge=0; player.lockout=0.8; player.inhaling=false; beep(120,0.2,'square',0.2); }
+  } else {
+    if(inhaleGain) inhaleGain.gain.value=0;
+    player.idleT+=dt;
+    if(wasIdle && player.idleT>0.6) player.charge+=22*dt;
+    else player.charge+=(ownedMut.iron?9*0.9:9)*dt;
+  }
+  player.charge=Math.min(100,player.charge);
+
+  // belch
+  if(panicQueued){ doBelch(true); panicQueued=false; belchQueued=false; }
+  else if(belchQueued){ doBelch(false); belchQueued=false; }
+
+  digest(dt);
+
+  // fullness effects
+  const f=player.gut.length/playerSlots();
+  player.wob+=dt*(2+f*8);
+  const damp=f>0.75?0.995:0.985;
+
+  if(player.stun>0){ player.stun-=dt; }
+  if(player.invuln>0) player.invuln-=dt;
+
+  applyGravity(dt);
+
+  // integrate player
+  player.x+=player.vx*dt; player.y+=player.vy*dt;
+  player.vx*=damp; player.vy*=damp;
+
+  // bodies integrate + collisions with player (too big -> shove/damage)
+  for(const b of bodies){
+    if(!b.alive) continue;
+    b.x+=b.vx*dt; b.y+=b.vy*dt; b.rot+=b.vr*dt;
+    b.vx*=0.999; b.vy*=0.999;
+    const dx=b.x-player.x, dy=b.y-player.y, d=Math.hypot(dx,dy);
+    if(d<b.radius+player.radius && b.radius>player.radius*GAPE_RATIO){
+      const rel=Math.hypot(b.vx-player.vx,b.vy-player.vy);
+      const nx=dx/(d||1), ny=dy/(d||1);
+      player.vx-=nx*30; player.vy-=ny*30;
+      b.vx+=nx*10; b.vy+=ny*10;
+      if(rel>260 && player.invuln<=0){ damagePlayer(0.06,0); }
+    }
+    // cull far
+    if(Math.hypot(b.x,b.y)>worldR*2.2) b.alive=false;
+  }
+  bodies=bodies.filter(b=>b.alive);
+
+  updateOther(dt);
+
+  // maintain field density
+  if(bodies.length<(currentTier===3?55:90) && rand()<0.4){
+    const arche=TIER_ARCH[currentTier];
+    const t=arche[Math.floor(rand()*arche.length)];
+    const ang=rand()*6.28,d=worldR*rr(1.1,1.6);
+    bodies.push(newBody(t,Math.cos(ang)*d,Math.sin(ang)*d,rr(-20,20),rr(-20,20)));
+  }
+  if(currentTier===3 && rand()<0.02) recomputeWells();
+
+  // particles
+  for(const p of particles){ p.x+=p.vx*dt; p.y+=p.vy*dt; p.life-=dt; }
+  particles=particles.filter(p=>p.life>0);
+
+  if(flash>0) flash-=dt*2;
+
+  // camera follow
+  cam.x+=(player.x-cam.x)*Math.min(1,dt*4);
+  cam.y+=(player.y-cam.y)*Math.min(1,dt*4);
+
+  checkFold();
+  checkDeath();
+}
+// ---- render ----
+function w2s(x,y){ return {x:(x-cam.x)*cam.zoom+W/2,y:(y-cam.y)*cam.zoom+H/2}; }
+
+function drawBodyShape(b,sx,sy,scale){
+  const pts=b.shape;
+  ctx.beginPath();
+  for(let i=0;i<pts.length;i++){
+    const a=pts[i].a+b.rot, r=pts[i].r*scale;
+    const px=sx+Math.cos(a)*r, py=sy+Math.sin(a)*r;
+    if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+  }
+  ctx.closePath();
+}
+
+function render(){
+  ctx.fillStyle='#05060b'; ctx.fillRect(0,0,W,H);
+
+  // parallax dust
+  for(const p of dust){
+    const px=(p.x-cam.x*p.s)*cam.zoom+W/2;
+    const py=(p.y-cam.y*p.s)*cam.zoom+H/2;
+    const wx=((px%W)+W)%W, wy=((py%H)+H)%H;
+    ctx.fillStyle=p.col; ctx.fillRect(wx,wy,p.sz,p.sz);
+  }
+
+  if(!player) return;
+
+  // bodies
+  for(const b of bodies){
+    const s=w2s(b.x,b.y); const scale=cam.zoom;
+    if(s.x<-100||s.x>W+100||s.y<-100||s.y>H+100) continue;
+    if(b.comet){
+      // tail
+      const v=Math.hypot(b.vx,b.vy)||1;
+      const tx=-b.vx/v, ty=-b.vy/v;
+      for(let i=1;i<=6;i++){
+        const tl=i*b.radius*1.4*scale;
+        ctx.globalAlpha=0.15*(1-i/7);
+        ctx.strokeStyle=b.rim; ctx.lineWidth=b.radius*scale*(1-i/8)*2;
+        ctx.beginPath(); ctx.moveTo(s.x,s.y);
+        ctx.lineTo(s.x+tx*tl,s.y+ty*tl); ctx.stroke();
+      }
+      ctx.globalAlpha=1;
+    }
+    drawGlow(s.x,s.y,b.radius*scale*2.2,b.col,0.12);
+    drawBodyShape(b,s.x,s.y,scale);
+    ctx.fillStyle=b.col; ctx.fill();
+    ctx.strokeStyle=b.rim; ctx.lineWidth=1.5; ctx.stroke();
+    if(b.moon){
+      // rim-light arc facing center
+      const a=Math.atan2(-b.y,-b.x);
+      ctx.strokeStyle='#f0e6d0'; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(s.x,s.y,b.radius*scale,a-0.9,a+0.9); ctx.stroke();
+    }
+  }
+
+  // ejected re-eatable already in bodies. particles:
+  for(const p of particles){
+    const s=w2s(p.x,p.y);
+    ctx.globalAlpha=Math.max(0,p.life/p.max);
+    ctx.fillStyle=p.col; ctx.fillRect(s.x-1,s.y-1,2.5,2.5);
+  }
+  ctx.globalAlpha=1;
+
+  // Other Mouth
+  if(other&&other.alive){
+    const s=w2s(other.x,other.y),sc=cam.zoom,r=other.radius*sc;
+    const tel=(other.state==='LUNGE'||other.telem>0);
+    drawGlow(s.x,s.y,r*2.5,tel?'#ff3a54':'#b06cff',tel?0.3:0.12);
+    ctx.beginPath(); ctx.arc(s.x,s.y,r,0,6.283);
+    ctx.fillStyle='#05060b'; ctx.fill();
+    ctx.strokeStyle=tel?'#ff3a54':'#b06cff'; ctx.lineWidth=2+other.jaw*4; ctx.stroke();
+    if(tel){
+      ctx.strokeStyle='#ff3a54'; ctx.globalAlpha=0.5;
+      ctx.beginPath(); ctx.arc(s.x,s.y,r*(1.3+other.jaw),0,6.283); ctx.stroke();
+      ctx.globalAlpha=1;
+    }
+  }
+
+  // Player Maw
+  renderMaw();
+
+  // cone
+  if(player.inhaling){
+    const aimX=cam.x+(mouse.x-W/2)/cam.zoom, aimY=cam.y+(mouse.y-H/2)/cam.zoom;
+    const dirA=Math.atan2(aimY-player.y,aimX-player.x);
+    const range=gapeRange()*cam.zoom, half=coneAngle();
+    const s=w2s(player.x,player.y);
+    const grd=ctx.createRadialGradient(s.x,s.y,0,s.x,s.y,range);
+    grd.addColorStop(0,'rgba(84,230,255,0.28)'); grd.addColorStop(1,'rgba(84,230,255,0)');
+    ctx.fillStyle=grd;
+    ctx.beginPath(); ctx.moveTo(s.x,s.y);
+    ctx.arc(s.x,s.y,range,dirA-half,dirA+half); ctx.closePath(); ctx.fill();
+  }
+
+  // fold white flash
+  if(folding||foldWhite>0){
+    ctx.globalAlpha=foldWhite*0.6; ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H); ctx.globalAlpha=1;
+  }
+  if(flash>0){ ctx.globalAlpha=flash*0.4; ctx.fillStyle='#ff3a54'; ctx.fillRect(0,0,W,H); ctx.globalAlpha=1; }
+}
+
+function renderMaw(){
+  const s=w2s(player.x,player.y), sc=cam.zoom;
+  const f=player.gut.length/playerSlots();
+  const baseR=player.radius*sc*(f>0.75?1+0.22*((f-0.75)/0.25):1);
+  drawGlow(s.x,s.y,baseR*3,player.inhaling?'#54e6ff':'#b06cff',0.25);
+  // wobbling outline
+  ctx.beginPath();
+  const N=40;
+  for(let i=0;i<=N;i++){
+    const a=i/N*6.283;
+    const wob=Math.sin(a*3+player.wob)*0.06*f + Math.sin(a*5-player.wob*1.3)*0.04*f + Math.sin(a*2+player.wob*0.5)*0.03;
+    const r=baseR*(1+wob);
+    const px=s.x+Math.cos(a)*r, py=s.y+Math.sin(a)*r;
+    if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+  }
+  ctx.closePath();
+  ctx.fillStyle='#000'; ctx.fill();
+  ctx.strokeStyle=player.invuln>0?'#ff3a54':(player.inhaling?'#54e6ff':'#b06cff');
+  ctx.lineWidth=2.5; ctx.stroke();
+
+  // gut ring
+  const gr=baseR*1.35;
+  for(let i=0;i<player.gut.length;i++){
+    const l=player.gut[i];
+    const a=i/playerSlots()*6.283+player.wob*0.2;
+    const gx=s.x+Math.cos(a)*gr, gy=s.y+Math.sin(a)*gr;
+    const prog=l.t/l.dt;
+    ctx.globalAlpha=0.4+0.6*prog;
+    ctx.beginPath(); ctx.arc(gx,gy,Math.max(2,l.radius*sc*0.6*prog+2),0,6.283);
+    ctx.fillStyle=l.col; ctx.fill();
+    ctx.globalAlpha=1;
+  }
+}
+// ---- HUD ----
+const TIER_NAME=['','Motes','Rubble','Worlds'];
+function drawHUD(){
+  if(!player) return;
+  const f=(player.gut.length/playerSlots()*100).toFixed(0);
+  const goal = currentTier<3?TIER_GOAL[currentTier]:TIER3_MASS_GOAL;
+  uiEl.innerHTML=
+    'TIER '+currentTier+' &mdash; '+TIER_NAME[currentTier]+'<br>'+
+    'MASS '+player.mass.toFixed(1)+' / '+goal+'<br>'+
+    'ESSENCE '+essence+'<br>'+
+    'GUT '+player.gut.length+'/'+playerSlots()+' ('+f+'%)<br>'+
+    'VOID '+player.charge.toFixed(0)+
+    (player.lockout>0?' [LOCKED]':'')+
+    (player.gut.length/playerSlots()>0.75?'<br><span style="color:#ff3a54">INDIGESTION</span>':'');
+}
+
+// ---- overlays ----
+const startBtn=document.getElementById('startBtn');
+startBtn.addEventListener('click',()=>{ ensureAudio(); startGame(); });
+
+function showEnd(won){
+  stopInhaleSound();
+  overlay.innerHTML =
+    '<h1>'+(won?'THE FULL STOP':'UNMADE')+'</h1>'+
+    '<p>'+(won?'You swallowed a scale and folded reality one final time. Beyond the last mote, something even larger stirs...':
+      'You collapsed below your own tier and were unmade by the void.')+'<br><br>'+
+    'Final Mass: '+player.mass.toFixed(1)+'<br>Essence: '+essence+
+    '<br>Reached Tier: '+currentTier+' ('+TIER_NAME[currentTier]+')</p>'+
+    '<button class="btn" id="againBtn">SWALLOW AGAIN</button>';
+  overlay.style.display='flex';
+  document.getElementById('againBtn').addEventListener('click',startGame);
+}
+
+function showMutation(){
+  let html='<h1>THE PALATE</h1><p>The Fold reshapes you. Choose one mutation.</p><div id="cards">';
+  for(const m of mutationChoices){
+    html+='<div class="card" data-id="'+m.id+'"><b>'+m.name+'</b><span>'+m.desc+'</span></div>';
+  }
+  html+='</div>';
+  overlay.innerHTML=html;
+  overlay.style.display='flex';
+  overlay.querySelectorAll('.card').forEach(c=>{
+    c.addEventListener('click',()=>pickMutation(c.getAttribute('data-id')));
+  });
+}
+
+// ---- main loop ----
+let last=performance.now();
+function loop(now){
+  let dt=(now-last)/1000; last=now;
+  if(dt>0.05) dt=0.05; // clamp
+  update(dt);
+  render();
+  drawHUD();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+</script>
+</body>
+</html>

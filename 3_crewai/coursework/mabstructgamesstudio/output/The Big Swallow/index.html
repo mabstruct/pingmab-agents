@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Big Swallow</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #0a0806; overflow: hidden;
+    font-family: 'Courier New', monospace;
+    cursor: crosshair;
+  }
+  #wrap {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  canvas {
+    background: #1a140c;
+    box-shadow: 0 0 80px rgba(0,0,0,0.9) inset, 0 0 40px #000;
+    image-rendering: auto;
+  }
+  #hint {
+    position: absolute; bottom: 8px; left: 0; right: 0;
+    text-align: center; color: #6b5a3e; font-size: 12px;
+    letter-spacing: 2px; pointer-events: none; user-select: none;
+  }
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="c" width="960" height="600"></canvas></div>
+<div id="hint">HOLD LEFT: INHALE &nbsp;·&nbsp; RIGHT: EXHALE &nbsp;·&nbsp; WHEEL: CONE WIDTH</div>
+<script>
+'use strict';
+// ===== The Big Swallow ===== single inline script, dt-based physics =====
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const W = 960, H = 600;
+const CX = 480, CY = 300;
+const ARENA = 640, CULL = 760;
+
+// ---- tunables ----
+const PULL_K = 5200;
+const BREATH_MAX = 100;
+const INHALE_DRAIN = 26;   // /s * strength
+const REGEN = 18;          // /s
+const REGEN_DELAY = 0.35;
+const GASP_TIME = 1.4;
+const GULLET_MAX = 100;
+const QUEUE_MAX = 6;
+const EXHALE_COST = 8;
+const DEBRIS_SPEED = 900;
+
+// ---- courses ----
+const COURSES = [
+  { name: 'A BEDROOM',      bg: '#241a10', fg: '#c9a86a', kinds: ['dust','toy','moth','marble'] },
+  { name: 'A SEASIDE TOWN', bg: '#1c2118', fg: '#b8c48a', kinds: ['gull','boat','house','wave'] },
+  { name: 'ORBIT',          bg: '#0e1420', fg: '#8ab0d0', kinds: ['sat','rock','comet','moon'] },
+  { name: 'THE OBSERVER',   bg: '#180a14', fg: '#d08ac0', kinds: ['grain','word','frame','lens'] }
+];
+
+// ---- state ----
+let state;
+function newState() {
+  return {
+    course: 0,
+    maw: { x: CX, y: CY, r: 46, open: 0 },
+    coneWidthDeg: 40,
+    strength: 0.7,
+    aim: 0,
+    lmb: false, rmb: false,
+    breath: BREATH_MAX,
+    breathTimer: 0,
+    gasp: 0,
+    gullet: 0,
+    queue: 0,
+    score: 0,
+    entities: [],
+    debris: [],
+    particles: [],
+    shake: 0,
+    swallowFx: 0,      // transition animation timer
+    intertitle: 0,     // "STILL HUNGRY" timer
+    grain: 0,
+    time: 0,
+    over: false,
+    win: false,
+    winFx: 0,
+    mouseX: CX, mouseY: 0
+  };
+}
+
+// ---- entity factory ----
+let idc = 0;
+function spawnEntity(s, atRim) {
+  const course = COURSES[s.course];
+  const kind = course.kinds[(Math.random() * course.kinds.length) | 0];
+  let ang = Math.random() * Math.PI * 2;
+  let dist = atRim ? (ARENA - 40 + Math.random() * 80) : (140 + Math.random() * (ARENA - 160));
+  const tierScale = [1, 1.1, 1.2, 1.0][s.course];
+  let sizeBase = 10 + Math.random() * 16;
+  // some big "non-food" style large objects
+  const big = Math.random() < 0.18;
+  if (big) sizeBase *= 2.2;
+  const e = {
+    id: ++idc,
+    kind,
+    x: CX + Math.cos(ang) * dist,
+    y: CY + Math.sin(ang) * dist,
+    vx: (Math.random() - 0.5) * 20,
+    vy: (Math.random() - 0.5) * 20,
+    r: sizeBase * tierScale,
+    hp: big ? 3 : 1,
+    maxhp: big ? 3 : 1,
+    rot: Math.random() * Math.PI * 2,
+    spin: (Math.random() - 0.5) * 1.5,
+    value: Math.round(sizeBase * (big ? 4 : 2)),
+    gulletValue: big ? 10 : 4,
+    big,
+    hue: Math.random()
+  };
+  return e;
+}
+
+function populate(s, n) {
+  s.entities.length = 0;
+  for (let i = 0; i < n; i++) s.entities.push(spawnEntity(s, false));
+}
+// ---- input ----
+function updateAim(mx, my) {
+  const rect = canvas.getBoundingClientRect();
+  const sx = W / rect.width, sy = H / rect.height;
+  const x = (mx - rect.left) * sx;
+  const y = (my - rect.top) * sy;
+  state.mouseX = x; state.mouseY = y;
+  state.aim = Math.atan2(y - CY, x - CX);
+}
+canvas.addEventListener('mousemove', e => updateAim(e.clientX, e.clientY));
+canvas.addEventListener('mousedown', e => {
+  updateAim(e.clientX, e.clientY);
+  if (state.over || state.win) { restart(); return; }
+  if (e.button === 0) state.lmb = true;
+  if (e.button === 2) { state.rmb = true; doExhale(state); }
+});
+canvas.addEventListener('mouseup', e => {
+  if (e.button === 0) {
+    state.lmb = false;
+    if (state.queue > 0) doExhale(state); // release fires loaded queue
+  }
+  if (e.button === 2) state.rmb = false;
+});
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  state.coneWidthDeg = Math.max(18, Math.min(70, state.coneWidthDeg + Math.sign(e.deltaY) * 4));
+  state.strength = Math.max(0.4, Math.min(1.6, 28 / state.coneWidthDeg));
+}, { passive: false });
+
+function restart() { state = newState(); populate(state, 46); }
+
+// ---- exhale ----
+function doExhale(s) {
+  if (s.queue <= 0) return;
+  if (s.breath < EXHALE_COST) return;
+  s.breath -= EXHALE_COST;
+  const n = s.queue;
+  for (let i = 0; i < n; i++) {
+    const spread = (Math.random() - 0.5) * (28 * Math.PI / 180);
+    const a = s.aim + spread;
+    s.debris.push({
+      x: CX + Math.cos(s.aim) * (s.maw.r + 6),
+      y: CY + Math.sin(s.aim) * (s.maw.r + 6),
+      vx: Math.cos(a) * DEBRIS_SPEED,
+      vy: Math.sin(a) * DEBRIS_SPEED,
+      life: 1.2, r: 5
+    });
+  }
+  s.queue = 0;
+  s.shake = Math.max(s.shake, 6);
+}
+
+// ---- helpers ----
+function angDiff(a, b) {
+  let d = a - b;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return d;
+}
+function addParticles(s, x, y, col, n) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const sp = 40 + Math.random() * 160;
+    s.particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.5 + Math.random() * 0.4, col });
+  }
+}
+// ================= UPDATE =================
+function update(dt, s) {
+  s.time += dt;
+  s.grain += dt;
+
+  // WIN sequence
+  if (s.win) { s.winFx += dt; return; }
+  if (s.over) return;
+
+  // swallow transition freeze-ish (still animate)
+  if (s.swallowFx > 0) {
+    s.swallowFx -= dt;
+    s.intertitle = Math.max(0, s.intertitle - dt);
+    // spin particles inward
+    for (const p of s.particles) { p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt; }
+    s.particles = s.particles.filter(p => p.life > 0);
+    return;
+  }
+  if (s.intertitle > 0) s.intertitle = Math.max(0, s.intertitle - dt);
+
+  const half = (s.coneWidthDeg * Math.PI / 180) / 2;
+  const inhaling = s.lmb && s.gasp <= 0 && s.breath > 0;
+
+  // ---- breath ----
+  if (s.gasp > 0) {
+    s.gasp -= dt;
+    s.maw.open = 1;
+  } else if (inhaling) {
+    s.breath -= INHALE_DRAIN * s.strength * dt;
+    s.breathTimer = 0;
+    s.maw.open += (1 - s.maw.open) * Math.min(1, dt * 10);
+    if (s.breath <= 0) { s.breath = 0; s.gasp = GASP_TIME; s.shake = 8; }
+  } else {
+    s.maw.open += (0 - s.maw.open) * Math.min(1, dt * 8);
+    s.breathTimer += dt;
+    if (s.breathTimer >= REGEN_DELAY) s.breath = Math.min(BREATH_MAX, s.breath + REGEN * dt);
+  }
+  s.maw.r = 46 + s.maw.open * 10 + Math.sin(s.time * 4) * 1.5;
+
+  // ---- pull entities ----
+  for (const e of s.entities) {
+    // drift
+    e.x += e.vx * dt; e.y += e.vy * dt;
+    e.rot += e.spin * dt;
+    const dx = CX - e.x, dy = CY - e.y;
+    const dist = Math.max(60, Math.min(800, Math.hypot(dx, dy)));
+    if (inhaling) {
+      const eang = Math.atan2(e.y - CY, e.x - CX);
+      const off = Math.abs(angDiff(eang, s.aim));
+      if (off < half) {
+        const fall = Math.cos(off / half * Math.PI / 2);
+        const F = PULL_K * s.strength * (1 / dist) * fall;
+        const nx = dx / dist, ny = dy / dist;
+        // radial toward maw + tangential spin
+        e.vx += (nx * F + (-ny) * F * 0.35) * dt;
+        e.vy += (ny * F + (nx) * F * 0.35) * dt;
+      }
+    }
+    // damping
+    e.vx *= (1 - 0.9 * dt);
+    e.vy *= (1 - 0.9 * dt);
+    // cull far
+    const d2 = Math.hypot(e.x - CX, e.y - CY);
+    if (d2 > CULL) { Object.assign(e, spawnEntity(s, true)); }
+  }
+
+  // ---- consume ----
+  for (let i = s.entities.length - 1; i >= 0; i--) {
+    const e = s.entities[i];
+    const d = Math.hypot(e.x - CX, e.y - CY);
+    if (d < s.maw.r + e.r * 0.4) {
+      if (e.big && e.hp > 1) { // big objects need shattering; but maw still nibbles
+        e.hp -= 0.02;
+      }
+      consume(s, e);
+      s.entities.splice(i, 1);
+      s.entities.push(spawnEntity(s, true));
+    }
+  }
+
+  // ---- debris ----
+  for (let i = s.debris.length - 1; i >= 0; i--) {
+    const d = s.debris[i];
+    d.x += d.vx * dt; d.y += d.vy * dt; d.life -= dt;
+    let hit = false;
+    for (const e of s.entities) {
+      if (e.hp <= 0) continue;
+      if (Math.hypot(d.x - e.x, d.y - e.y) < e.r + d.r) {
+        e.hp -= 1; hit = true;
+        addParticles(s, d.x, d.y, COURSES[s.course].fg, 4);
+        if (e.hp <= 0) { e.big = false; e.hp = 1; e.maxhp = 1; e.r *= 0.6; }
+        break;
+      }
+    }
+    if (hit || d.life <= 0 || Math.hypot(d.x - CX, d.y - CY) > CULL) s.debris.splice(i, 1);
+  }
+
+  // ---- particles ----
+  for (const p of s.particles) { p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt; }
+  s.particles = s.particles.filter(p => p.life > 0);
+
+  if (s.shake > 0) s.shake = Math.max(0, s.shake - dt * 24);
+}
+
+function consume(s, e) {
+  s.score += e.value;
+  s.gullet = Math.min(GULLET_MAX, s.gullet + e.gulletValue);
+  if (s.queue < QUEUE_MAX) s.queue++;
+  addParticles(s, e.x, e.y, COURSES[s.course].fg, 6);
+  if (s.gullet >= GULLET_MAX) triggerSwallow(s);
+}
+
+function triggerSwallow(s) {
+  s.gullet = 0;
+  s.shake = 12;
+  addParticles(s, CX, CY, COURSES[s.course].fg, 40);
+  if (s.course < COURSES.length - 1) {
+    s.course++;
+    s.swallowFx = 1.2;
+    s.intertitle = 2.2;
+    populate(s, 46);
+  } else {
+    // final course consumed -> win
+    s.win = true;
+    s.winFx = 0;
+  }
+}
+// ================= RENDER =================
+function drawEntity(ctx, e, fg) {
+  ctx.save();
+  ctx.translate(e.x, e.y);
+  ctx.rotate(e.rot);
+  ctx.fillStyle = fg;
+  ctx.globalAlpha = e.big ? 0.9 : 0.8;
+  const r = e.r;
+  ctx.beginPath();
+  switch (e.kind) {
+    case 'toy': case 'boat': case 'sat': case 'frame':
+      ctx.rect(-r, -r * 0.7, r * 2, r * 1.4); break;
+    case 'moth': case 'gull': case 'comet': case 'word':
+      ctx.moveTo(0, -r); ctx.lineTo(r, r); ctx.lineTo(-r, r); ctx.closePath(); break;
+    case 'house': case 'moon': case 'lens': case 'marble':
+      ctx.arc(0, 0, r, 0, Math.PI * 2); break;
+    default: // dust wave rock grain
+      for (let i = 0; i < 6; i++) {
+        const a = i / 6 * Math.PI * 2;
+        const rr = r * (0.7 + (i % 2) * 0.5);
+        ctx[i === 0 ? 'moveTo' : 'lineTo'](Math.cos(a) * rr, Math.sin(a) * rr);
+      }
+      ctx.closePath();
+  }
+  ctx.fill();
+  if (e.big && e.hp < e.maxhp) {
+    ctx.globalAlpha = 1; ctx.strokeStyle = '#e8d0a0'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(0, 0, r + 3, -Math.PI / 2, -Math.PI / 2 + (e.hp / e.maxhp) * Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function render(s) {
+  const course = COURSES[s.course];
+  ctx.clearRect(0, 0, W, H);
+
+  // shake offset
+  let ox = 0, oy = 0;
+  const shakeAmp = s.shake + (s.gasp > 0 ? 3 : 0);
+  if (shakeAmp > 0) { ox = (Math.random() - 0.5) * shakeAmp; oy = (Math.random() - 0.5) * shakeAmp; }
+  ctx.save();
+  ctx.translate(ox, oy);
+
+  // background
+  ctx.fillStyle = course.bg;
+  ctx.fillRect(-20, -20, W + 40, H + 40);
+
+  // vignette rings
+  ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+  ctx.lineWidth = 1;
+  for (let i = 1; i <= 5; i++) {
+    ctx.beginPath(); ctx.arc(CX, CY, i * 110, 0, Math.PI * 2); ctx.stroke();
+  }
+
+  // swallow transition zoom flash
+  if (s.swallowFx > 0) {
+    const t = 1 - s.swallowFx / 1.2;
+    ctx.fillStyle = 'rgba(255,250,235,' + (1 - t) * 0.6 + ')';
+    ctx.fillRect(-20, -20, W + 40, H + 40);
+  }
+
+  // entities
+  for (const e of s.entities) drawEntity(ctx, e, course.fg);
+
+  // debris
+  ctx.fillStyle = '#f0e0b0';
+  for (const d of s.debris) { ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2); ctx.fill(); }
+
+  // particles
+  for (const p of s.particles) {
+    ctx.globalAlpha = Math.max(0, p.life);
+    ctx.fillStyle = p.col;
+    ctx.fillRect(p.x - 1.5, p.y - 1.5, 3, 3);
+  }
+  ctx.globalAlpha = 1;
+
+  // inhale cone
+  if (s.lmb && s.gasp <= 0 && s.breath > 0) {
+    const half = (s.coneWidthDeg * Math.PI / 180) / 2;
+    const g = ctx.createRadialGradient(CX, CY, s.maw.r, CX, CY, 620);
+    g.addColorStop(0, 'rgba(255,240,200,0.28)');
+    g.addColorStop(1, 'rgba(255,240,200,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(CX, CY);
+    ctx.arc(CX, CY, 620, s.aim - half, s.aim + half);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // the maw
+  drawMaw(s);
+
+  // gasp overlay
+  if (s.gasp > 0) {
+    ctx.fillStyle = 'rgba(120,20,20,' + (0.15 + 0.1 * Math.sin(s.time * 30)) + ')';
+    ctx.fillRect(-20, -20, W + 40, H + 40);
+  }
+
+  ctx.restore();
+
+  // ---- HUD (edible in finale conceptually; drawn on top) ----
+  drawHUD(s);
+
+  // film grain
+  drawGrain(s);
+
+  // intertitle
+  if (s.intertitle > 0) drawIntertitle(s, '"STILL HUNGRY"');
+
+  // win
+  if (s.win) drawWin(s);
+
+  // letterbox bars
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, 14); ctx.fillRect(0, H - 14, W, 14);
+}
+function drawMaw(s) {
+  const r = s.maw.r;
+  // throat glow
+  const g = ctx.createRadialGradient(CX, CY, 2, CX, CY, r * 1.6);
+  g.addColorStop(0, '#000');
+  g.addColorStop(0.6, '#1a0d06');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(CX, CY, r * 1.6, 0, Math.PI * 2); ctx.fill();
+  // mouth disc
+  ctx.fillStyle = '#050302';
+  ctx.beginPath(); ctx.arc(CX, CY, r, 0, Math.PI * 2); ctx.fill();
+  // lip ring
+  ctx.strokeStyle = '#c9a86a';
+  ctx.lineWidth = 3 + s.maw.open * 2;
+  ctx.beginPath(); ctx.arc(CX, CY, r + 1, 0, Math.PI * 2); ctx.stroke();
+  // teeth flicker
+  ctx.strokeStyle = 'rgba(220,200,150,' + (0.3 + s.maw.open * 0.4) + ')';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 16; i++) {
+    const a = i / 16 * Math.PI * 2 + s.time * 0.2;
+    ctx.beginPath();
+    ctx.moveTo(CX + Math.cos(a) * r, CY + Math.sin(a) * r);
+    ctx.lineTo(CX + Math.cos(a) * (r - 6 - s.maw.open * 5), CY + Math.sin(a) * (r - 6 - s.maw.open * 5));
+    ctx.stroke();
+  }
+}
+
+function bar(x, y, w, h, frac, col, label) {
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = col;
+  ctx.fillRect(x, y, w * Math.max(0, Math.min(1, frac)), h);
+  ctx.strokeStyle = '#6b5a3e'; ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, y + 0.5, w, h);
+  ctx.fillStyle = '#c9a86a';
+  ctx.font = '10px "Courier New"';
+  ctx.fillText(label, x, y - 4);
+}
+
+function drawHUD(s) {
+  ctx.textAlign = 'left';
+  // gullet (right)
+  bar(W - 210, 26, 190, 12, s.gullet / GULLET_MAX, '#c9a86a', 'GULLET');
+  // breath (left)
+  bar(20, 26, 190, 12, s.breath / BREATH_MAX, s.gasp > 0 ? '#c04030' : '#8ab0d0', 'BREATH');
+  // queue pellets
+  ctx.fillStyle = '#c9a86a';
+  for (let i = 0; i < QUEUE_MAX; i++) {
+    ctx.globalAlpha = i < s.queue ? 1 : 0.2;
+    ctx.beginPath(); ctx.arc(28 + i * 16, 58, 5, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  // score + course
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#c9a86a';
+  ctx.font = '14px "Courier New"';
+  ctx.fillText('SCORE ' + s.score, CX, 32);
+  ctx.font = '11px "Courier New"';
+  ctx.fillText('COURSE ' + (s.course + 1) + '/4  ·  ' + COURSES[s.course].name, CX, 48);
+  // cone width readout
+  ctx.textAlign = 'right';
+  ctx.font = '10px "Courier New"';
+  ctx.fillText('CONE ' + s.coneWidthDeg.toFixed(0) + '°  STR ' + s.strength.toFixed(2), W - 20, 58);
+  ctx.textAlign = 'left';
+}
+
+function drawGrain(s) {
+  // sparse film grain via random dots per frame
+  const n = 90 + (s.gasp > 0 ? 120 : 0);
+  ctx.fillStyle = 'rgba(255,240,210,0.06)';
+  for (let i = 0; i < n; i++) {
+    ctx.fillRect((Math.random() * W) | 0, (Math.random() * H) | 0, 1, 1);
+  }
+  // occasional scratch line
+  if (Math.random() < 0.08) {
+    const lx = Math.random() * W;
+    ctx.strokeStyle = 'rgba(255,240,210,0.15)';
+    ctx.beginPath(); ctx.moveTo(lx, 0); ctx.lineTo(lx + (Math.random() - 0.5) * 10, H); ctx.stroke();
+  }
+}
+
+function drawIntertitle(s, text) {
+  const a = Math.min(1, s.intertitle);
+  ctx.fillStyle = 'rgba(0,0,0,' + a * 0.85 + ')';
+  ctx.fillRect(0, CY - 70, W, 140);
+  ctx.fillStyle = '#e8d0a0';
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 44px "Courier New"';
+  ctx.globalAlpha = a;
+  ctx.fillText(text, CX, CY + 16);
+  ctx.globalAlpha = 1;
+  ctx.textAlign = 'left';
+}
+
+function drawWin(s) {
+  const t = s.winFx;
+  // white flash then title card
+  if (t < 1.2) {
+    ctx.fillStyle = 'rgba(255,250,240,' + Math.min(1, t / 0.6) + ')';
+    ctx.fillRect(0, 0, W, H);
+  } else {
+    ctx.fillStyle = '#0a0806';
+    ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#e8d0a0';
+    ctx.font = 'bold 40px "Courier New"';
+    ctx.fillText('THE  END', CX, CY - 30);
+    ctx.font = '16px "Courier New"';
+    ctx.fillText('You ate everything. Even this.', CX, CY + 10);
+    ctx.fillText('FINAL SCORE  ' + s.score, CX, CY + 40);
+    ctx.font = '12px "Courier New"';
+    ctx.fillStyle = '#8a7a5a';
+    ctx.fillText('click to swallow again', CX, CY + 80);
+    ctx.textAlign = 'left';
+  }
+}
+// ================= MAIN LOOP =================
+let last = performance.now();
+function frame(now) {
+  let dt = (now - last) / 1000;
+  last = now;
+  if (dt > 0.05) dt = 0.05; // clamp big gaps
+  update(dt, state);
+  render(state);
+  requestAnimationFrame(frame);
+}
+
+restart();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

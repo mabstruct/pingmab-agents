@@ -1,0 +1,30 @@
+{
+  "overall": "pass",
+  "blocked": false,
+  "artifact": "/Users/mab/dev/agents/pingmab-agents/3_crewai/coursework/mabstructgamesstudio/output/The Big Swallow/index.html",
+  "tier0": {
+    "tier": 0,
+    "pass": true,
+    "issues": [],
+    "checks": {
+      "bytes": 29825,
+      "lines": 865,
+      "script_blocks": 1,
+      "body_closes": 1,
+      "html_closes": 1,
+      "js_parse_ok": true
+    }
+  },
+  "tier1": {
+    "pass": true,
+    "issues": [],
+    "checks": {
+      "script_blocks": 1,
+      "boot_clicked": true,
+      "start_hidden": true,
+      "runtime_error": null,
+      "clicked_id": "startBtn"
+    },
+    "tier": 1
+  }
+}
