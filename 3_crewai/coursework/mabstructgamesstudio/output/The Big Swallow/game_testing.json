@@ -1,0 +1,32 @@
+{
+  "overall": "fail",
+  "blocked": false,
+  "artifact": "/Users/mab/dev/agents/pingmab-agents/3_crewai/coursework/mabstructgamesstudio/output/The Big Swallow/index.html",
+  "tier0": {
+    "tier": 0,
+    "pass": true,
+    "issues": [],
+    "checks": {
+      "bytes": 17543,
+      "lines": 574,
+      "script_blocks": 1,
+      "body_closes": 1,
+      "html_closes": 1,
+      "js_parse_ok": true
+    }
+  },
+  "tier1": {
+    "pass": false,
+    "issues": [
+      "no start button handler found (startBtn/btnCampaign/btnZen onclick or click listener)"
+    ],
+    "checks": {
+      "script_blocks": 1,
+      "boot_clicked": false,
+      "start_hidden": false,
+      "runtime_error": null,
+      "clicked_id": null
+    },
+    "tier": 1
+  }
+}
