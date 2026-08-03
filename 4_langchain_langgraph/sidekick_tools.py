@@ -7,30 +7,50 @@ from contextlib import AsyncExitStack
 import requests
 import wikipedia
 from dotenv import load_dotenv
-from langchain_community.tools import GoogleSerperRun, WikipediaQueryRun
-from langchain_community.utilities import GoogleSerperAPIWrapper, WikipediaAPIWrapper
+from langchain_tavily import TavilySearch
+from langchain_tavily._utilities import TavilySearchAPIWrapper
+from langchain_community.tools import WikipediaQueryRun
+from langchain_community.utilities import WikipediaAPIWrapper
 from langchain_core.tools import tool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.tools import load_mcp_tools
 
 load_dotenv(override=True)
 
+# Getting the Telegram bot token and chat ID from environment variables
+# You can also replace these with your actual values directly
+
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "UNKNOWN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "UNKNOWN")
+
 # Wikimedia rejects the wikipedia library's default user agent, so identify ourselves properly
 wikipedia.set_user_agent("agentic-track-course (https://edwarddonner.com)")
 
-search = GoogleSerperRun(api_wrapper=GoogleSerperAPIWrapper())
-
+search = TavilySearch(api_wrapper=TavilySearchAPIWrapper())
 wikipedia_lookup = WikipediaQueryRun(api_wrapper=WikipediaAPIWrapper())
+
+
+def send_telegram_message(text):
+    if not TELEGRAM_BOT_TOKEN or TELEGRAM_BOT_TOKEN == "UNKNOWN":
+        return {"status": "error", "message": "TELEGRAM_BOT_TOKEN is not set"}
+    if not TELEGRAM_CHAT_ID or TELEGRAM_CHAT_ID == "UNKNOWN":
+        return {"status": "error", "message": "TELEGRAM_CHAT_ID is not set"}
+
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text}
+    response = requests.post(url, data=payload)
+
+    if response.status_code == 200:
+        return {"status": "success", "message": text}
+    return {"status": "error", "message": response.text}
 
 
 @tool
 def send_push_notification(text: str) -> str:
     """Send a short push notification to the user's phone."""
-    response = requests.post(
-        "https://api.pushover.net/1/messages.json",
-        data={"token": os.getenv("PUSHOVER_TOKEN"), "user": os.getenv("PUSHOVER_USER"), "message": text},
-    )
-    response.raise_for_status()
+    result = send_telegram_message(text)
+    if result["status"] != "success":
+        raise RuntimeError(f"Telegram notification failed: {result['message']}")
     return "Notification sent"
 
 
