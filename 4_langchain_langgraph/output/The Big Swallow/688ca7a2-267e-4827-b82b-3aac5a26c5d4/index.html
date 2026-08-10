@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>The Big Swallow</title>
+<style>
+  html,body{margin:0;height:100%;background:#050508;overflow:hidden;font-family:Georgia,serif;color:#efe7d8}
+  canvas{display:block;width:100vw;height:100vh;image-rendering:auto}
+  .ui{position:fixed;left:0;top:0;right:0;pointer-events:none;text-shadow:0 1px 2px #000}
+  .top{display:flex;justify-content:space-between;gap:12px;padding:10px 12px;font-size:14px}
+  .panel{background:rgba(10,10,14,.54);border:1px solid rgba(255,235,190,.12);border-radius:10px;padding:8px 10px;backdrop-filter:blur(2px)}
+  .meter{width:210px;height:10px;border-radius:999px;background:#2a2230;overflow:hidden;border:1px solid rgba(255,255,255,.1)}
+  .fill{height:100%;width:50%;background:linear-gradient(90deg,#4be0b8,#f1c65d,#d84b5d)}
+  .msg{position:fixed;left:50%;top:14px;transform:translateX(-50%);padding:8px 14px;border-radius:999px;background:rgba(16,16,22,.72);border:1px solid rgba(255,255,255,.14);opacity:0;transition:opacity .25s}
+  .msg.show{opacity:1}
+  .bottom{position:fixed;left:12px;bottom:12px;max-width:min(580px,calc(100vw - 24px));font-size:13px;line-height:1.35}
+  .small{opacity:.84}
+  .title{font-size:18px;letter-spacing:.5px}
+  .hint{color:#d6c39b}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="ui">
+  <div class="top">
+    <div class="panel"><div class="title">The Big Swallow</div><div class="small">The Mouth Beneath the Mansion</div></div>
+    <div class="panel" id="status">Room 1/4 · Hide in shadow · Swallow to reshape</div>
+    <div class="panel">
+      <div>Risk</div>
+      <div class="meter"><div class="fill" id="riskFill"></div></div>
+    </div>
+  </div>
+  <div class="msg" id="msg"></div>
+  <div class="bottom panel" id="help">
+    <div class="hint">Move: WASD / Arrows · Swallow: Space or E · Sprint: Shift · Restart: R</div>
+    <div class="small">Avoid sight cones and sound. Swallowing objects can reveal passages, silence hazards, or alter layouts.</div>
+  </div>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const riskFill=document.getElementById('riskFill'),statusEl=document.getElementById('status'),msgEl=document.getElementById('msg');
+let W=innerWidth,H=innerHeight,DPR=1; function resize(){DPR=Math.min(2,devicePixelRatio||1);canvas.width=W*DPR;canvas.height=H*DPR;canvas.style.width=W+'px';canvas.style.height=H+'px';ctx.setTransform(DPR,0,0,DPR,0,0)} addEventListener('resize',resize); resize();
+const keys={}; addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true; if([' ','e','arrowup','arrowdown','arrowleft','arrowright'].includes(e.key.toLowerCase())) e.preventDefault(); if(e.key.toLowerCase()==='r') resetGame();}); addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+let audioCtx=null; function beep(type,f,d,v=0.03){try{audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)(); const o=audioCtx.createOscillator(),g=audioCtx.createGain(); o.type=type; o.frequency.setValueAtTime(f,audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(Math.max(40,f*0.5),audioCtx.currentTime+d); g.gain.value=v; g.gain.exponentialRampToValueAtTime(0.0001,audioCtx.currentTime+d); o.connect(g).connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime+d+0.02);}catch(e){}}
+const TILE=48, cols=18, rows=12;
+const rooms=[
+ {name:'Entry Hall', lore:'A portrait watches from the dark.', walls:["111111111111111111","100000000000000001","100011100001110001","100010000001000001","100010111101000001","100000100001000001","100000100001000001","100010100000000001","100010111111110001","100000000000000001","100000000000000001","111111111111111111"], spawn:[2,9], goal:[15,2], guards:[{x:10,y:7,dir:1,patrol:[[10,7],[14,7],[14,9],[9,9]],speed:1.0,range:5,fov:.7,phase:0}], objects:[{x:5,y:4,t:'crate',s:true},{x:9,y:5,t:'note',s:false},{x:12,y:8,t:'chandelier',s:true}]},
+ {name:'Gallery of Whispers', lore:'Footsteps echo through hollow frames.', walls:["111111111111111111","100000000000000001","101111001111110101","100001000000010001","111101111110010001","100000000010000001","100001110010111101","100000010000000001","101111010111110101","100000000000000001","100000000000000001","111111111111111111"], spawn:[2,2], goal:[15,9], guards:[{x:14,y:2,dir:2,patrol:[[14,2],[3,2],[3,9],[14,9]],speed:1.2,range:6,fov:.8,phase:0}], objects:[{x:8,y:5,t:'statue',s:true},{x:4,y:7,t:'note',s:false},{x:11,y:3,t:'panel',s:true}]},
+ {name:'Dining Crypt', lore:'The silverware is always listening.', walls:["111111111111111111","100000000000000001","101111111110111101","100000000010000001","100111110010111001","100100000000001001","100101111111001001","100100000001001001","100111110001111001","100000000000000001","100000000000000001","111111111111111111"], spawn:[2,9], goal:[15,2], guards:[{x:8,y:2,dir:1,patrol:[[8,2],[14,2],[14,9],[8,9],[8,5]],speed:1.1,range:5,fov:.75,phase:0},{x:3,y:5,dir:0,patrol:[[3,5],[3,8],[6,8],[6,5]],speed:0.9,range:4,fov:.9,phase:0}], objects:[{x:5,y:2,t:'table',s:true},{x:10,y:7,t:'note',s:false},{x:13,y:5,t:'pantry',s:true}]},
+ {name:'Understairs Secret', lore:'Beneath the final stair is a second house.', walls:["111111111111111111","100000000000000001","101111111011111101","100000001000000001","100111101111111001","100100000000001001","100101111111101001","100100000001001001","100111111001111001","100000000000000001","100000000000000001","111111111111111111"], spawn:[2,9], goal:[15,2], guards:[{x:14,y:8,dir:2,patrol:[[14,8],[9,8],[9,3],[14,3]],speed:1.25,range:6,fov:.78,phase:0}], objects:[{x:7,y:4,t:'wallchunk',s:true},{x:4,y:8,t:'note',s:false},{x:11,y:6,t:'panel',s:true}]}];let state; function makeRoomObjects(r){return r.objects.map(o=>({x:o.x,y:o.y,t:o.t,swallowed:false,solid:o.s!==false,secret:o.t==='panel',open:false}))}
+function resetGame(){state={room:0,px:0,py:0,vx:0,vy:0,risk:0,goalPulse:0,win:false,over:false,t:0,notes:[],message:'',msgTime:0,stealth:0,roomObjects:makeRoomObjects(rooms[0]),guards:JSON.parse(JSON.stringify(rooms[0].guards)),pickedSecret:false}; let sp=rooms[0].spawn; state.px=(sp[0]+.5)*TILE; state.py=(sp[1]+.5)*TILE; showMsg('A wet hush stirs below the mansion...');}
+function showMsg(s){state.message=s; state.msgTime=2.6; msgEl.textContent=s; msgEl.classList.add('show'); beep('sine',220,0.08,0.02)}
+resetGame();
+function tileAt(room,x,y){if(y<0||y>=rows||x<0||x>=cols)return 1; return room.walls[y][x]==='1'?1:0}
+function objAt(){return state.roomObjects.find(o=>!o.swallowed && Math.abs(o.x*TILE+TILE/2-state.px)<22 && Math.abs(o.y*TILE+TILE/2-state.py)<22)}
+function canSee(g,tx,ty){const dx=tx-(g.x*TILE+TILE/2),dy=ty-(g.y*TILE+TILE/2); const d=Math.hypot(dx,dy); if(d>g.range*TILE)return false; const ang=Math.atan2(dy,dx),fa=g.dir*Math.PI/2; let diff=Math.atan2(Math.sin(ang-fa),Math.cos(ang-fa)); return Math.abs(diff)<g.fov;}
+function moveCollide(x,y){const r=14; const pts=[[x-r,y-r],[x+r,y-r],[x-r,y+r],[x+r,y+r]]; for(const p of pts){const tx=Math.floor(p[0]/TILE),ty=Math.floor(p[1]/TILE); if(tileAt(rooms[state.room],tx,ty)) return true; for(const o of state.roomObjects) if(!o.swallowed && o.solid){const ox=o.x*TILE,oy=o.y*TILE; if(Math.abs(p[0]-(ox+TILE/2))<20&&Math.abs(p[1]-(oy+TILE/2))<20) return true;}} return false;}
+function update(dt){if(state.over||state.win){state.t+=dt; return;} state.t+=dt; const spd=(keys['shift']?138:102); let mx=(keys['d']||keys['arrowright']?1:0)-(keys['a']||keys['arrowleft']?1:0), my=(keys['s']||keys['arrowdown']?1:0)-(keys['w']||keys['arrowup']?1:0); const len=Math.hypot(mx,my)||1; mx/=len; my/=len; let nx=state.px+mx*spd*dt, ny=state.py+my*spd*dt; if(!moveCollide(nx,state.py)) state.px=nx; if(!moveCollide(state.px,ny)) state.py=ny; 
+ const room=rooms[state.room]; for(const g of state.guards){const path=g.patrol, tgt=path[g.phase%path.length]; const tx=(tgt[0]+.5)*TILE, ty=(tgt[1]+.5)*TILE, dx=tx-(g.x*TILE+TILE/2),dy=ty-(g.y*TILE+TILE/2),d=Math.hypot(dx,dy); if(d<4){g.phase++;} else {const ux=dx/(d||1),uy=dy/(d||1); g.x+=ux*g.speed*dt; g.y+=uy*g.speed*dt; g.dir=Math.abs(ux)>Math.abs(uy)?(ux>0?1:3):(uy>0?2:0);} if(canSee(g,state.px,state.py)){state.risk=Math.min(1,state.risk+dt*.28); if(state.risk>0.92){state.over=true; showMsg('Caught in the candlelight!'); beep('sawtooth',90,.4,.05);} else if(state.risk>0.6) beep('triangle',180,0.05,.01);}}
+ state.risk=Math.max(0,state.risk-dt*.08); riskFill.style.width=(state.risk*100)+'%';
+ if(state.msgTime>0){state.msgTime-=dt; if(state.msgTime<=0) msgEl.classList.remove('show');}
+ if((keys[' ']||keys['e'])&& !state.eHeld){state.eHeld=true; swallowAction();} if(!(keys[' ']||keys['e'])) state.eHeld=false;
+ if(checkGoal()) nextRoom();
+ statusEl.textContent=`Room ${state.room+1}/${rooms.length} · ${room.name} · ${state.win?'Mansion opened':state.over?'Detected':'Stealth in progress'}`;
+}
+function swallowAction(){const o=objAt(); if(o){o.swallowed=true; state.risk=Math.min(1,state.risk+0.12); state.stealth++; beep('square',120,0.12,.03); showMsg(`Swallowed ${o.t}.`); if(o.t==='panel'){const near=rooms[state.room].walls; const y=5,x=9; near[y]=near[y].substring(0,x)+'0'+near[y].substring(x+1);}} else {const tx=Math.floor(state.px/TILE),ty=Math.floor(state.py/TILE); if(tileAt(rooms[state.room],tx,ty)===0){state.risk=Math.min(1,state.risk+0.18); showMsg('The mouth flexes beneath the floor...'); if(Math.random()<0.35){let wx=tx+1; if(wx<cols-1&&tileAt(rooms[state.room],wx,ty)){const arr=rooms[state.room].walls[ty].split(''); arr[wx]='0'; rooms[state.room].walls[ty]=arr.join(''); beep('sine',96,0.16,.02);}}}}
+}function checkGoal(){const room=rooms[state.room]; const gx=(room.goal[0]+.5)*TILE,gy=(room.goal[1]+.5)*TILE; if(Math.hypot(state.px-gx,state.py-gy)<22){state.goalPulse=1; return true;} return false;}
+function nextRoom(){beep('triangle',330,0.12,.03); state.room++; if(state.room>=rooms.length){state.win=true; showMsg('A secret appetite has opened the manor.'); beep('sine',220,0.5,.04); return;} const r=rooms[state.room]; state.roomObjects=makeRoomObjects(r); state.guards=JSON.parse(JSON.stringify(r.guards)); let sp=r.spawn; state.px=(sp[0]+.5)*TILE; state.py=(sp[1]+.5)*TILE; state.risk=0; state.stealth=0; showMsg(r.lore);}
+function drawRoom(){const room=rooms[state.room]; ctx.fillStyle='#09090d'; ctx.fillRect(0,0,W,H); const camX=W/2-state.px, camY=H/2-state.py; ctx.save(); ctx.translate(camX,camY); 
+ const grad=ctx.createRadialGradient(state.px,state.py,50,state.px,state.py,550); grad.addColorStop(0,'#2b2228'); grad.addColorStop(1,'#08080b'); ctx.fillStyle=grad; ctx.fillRect(state.px-700,state.py-500,1400,1000);
+ for(let y=0;y<rows;y++) for(let x=0;x<cols;x++){if(tileAt(room,x,y)){ctx.fillStyle=(x+y)%2?'#1d1621':'#271d29'; ctx.fillRect(x*TILE,y*TILE,TILE,TILE); ctx.fillStyle='rgba(255,220,180,.04)'; ctx.fillRect(x*TILE+4,y*TILE+4,TILE-8,TILE-8);} else {ctx.fillStyle='rgba(60,45,65,.12)'; ctx.fillRect(x*TILE,y*TILE,TILE,TILE);}}
+ for(const o of state.roomObjects){if(o.swallowed)continue; const x=o.x*TILE+TILE/2,y=o.y*TILE+TILE/2; ctx.save(); ctx.translate(x,y); if(o.t==='note'){ctx.fillStyle='#d8c7a4'; ctx.fillRect(-8,-5,16,10); ctx.fillStyle='#6c5a40'; ctx.fillRect(-6,-2,12,1);} else if(o.t==='crate'||o.t==='table'||o.t==='wallchunk'){ctx.fillStyle='#6d4d3b'; ctx.fillRect(-14,-14,28,28); ctx.strokeStyle='#2a1b16'; ctx.strokeRect(-14,-14,28,28);} else if(o.t==='statue'){ctx.fillStyle='#7c7687'; ctx.beginPath(); ctx.arc(0,-8,8,0,Math.PI*2); ctx.fill(); ctx.fillRect(-7,-1,14,18);} else if(o.t==='panel'){ctx.fillStyle='#3d2b2f'; ctx.fillRect(-16,-10,32,20); ctx.strokeStyle='#aa8'; ctx.strokeRect(-16,-10,32,20);} ctx.restore(); }
+ for(const g of state.guards){const x=g.x*TILE+TILE/2,y=g.y*TILE+TILE/2; ctx.save(); ctx.translate(x,y); ctx.fillStyle='rgba(255,210,160,.16)'; ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,g.range*TILE,g.dir*Math.PI/2-g.fov,g.dir*Math.PI/2+g.fov); ctx.closePath(); ctx.fill(); ctx.fillStyle='#e6d5c4'; ctx.beginPath(); ctx.arc(0,0,10,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#221'; ctx.fillRect(-2,-2,4,4); ctx.restore(); }
+ const pulse=0.5+0.5*Math.sin(state.t*4); ctx.fillStyle=`rgba(255,100,120,${state.risk*.12})`; ctx.fillRect(0,0,cols*TILE,rows*TILE);
+ const px=state.px,py=state.py; ctx.save(); ctx.translate(px,py); const mouth=14+4*Math.sin(state.t*6); ctx.fillStyle='#24151d'; ctx.beginPath(); ctx.ellipse(0,0,18,14,0,0,Math.PI*2); ctx.fill(); ctx.fillStyle=`rgba(140,255,214,${.45+.25*pulse})`; ctx.beginPath(); ctx.ellipse(0,0,mouth,10,0,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='#bdebd7'; ctx.strokeEllipse?ctx.strokeEllipse(0,0,mouth,10):ctx.stroke(); ctx.restore();
+ ctx.restore();
+ // vignette and cones overlay
+ const g2=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*.18,W/2,H/2,Math.max(W,H)*.65); g2.addColorStop(0,'rgba(0,0,0,0)'); g2.addColorStop(1,'rgba(0,0,0,.62)'); ctx.fillStyle=g2; ctx.fillRect(0,0,W,H);
+ ctx.fillStyle='rgba(255,245,220,.04)'; for(let i=0;i<80;i++){ctx.fillRect((i*97+state.t*15)%W,(i*53+state.t*9)%H,1,1)}
+}
+function render(){drawRoom(); if(state.win||state.over){ctx.fillStyle='rgba(0,0,0,.42)'; ctx.fillRect(0,0,W,H); ctx.fillStyle='#efe7d8'; ctx.font='bold 28px Georgia,serif'; ctx.textAlign='center'; ctx.fillText(state.win?'You have swallowed the house awake.':'The mansion has noticed you.',W/2,H/2-6); ctx.font='16px Georgia,serif'; ctx.fillText('Press R to try again',W/2,H/2+24);} }
+let last=performance.now(); function loop(now){const dt=Math.min(.033,(now-last)/1000); last=now; update(dt); render(); requestAnimationFrame(loop);} requestAnimationFrame(loop);window.addEventListener('pointerdown',()=>{if(audioCtx&&audioCtx.state==='suspended') audioCtx.resume();});
+// simple floor-visibility sparkle / mansion ambience effect
+setInterval(()=>{if(state&&!state.over&&!state.win&&Math.random()<0.5){const g=rooms[state.room].guards[0]; if(g&&canSee(g,state.px,state.py)) beep('triangle',140,0.05,.008)}},1300);
+</script>
+</body>
+</html>
