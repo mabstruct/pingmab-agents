@@ -16,7 +16,7 @@ TIMEOUT = 120
 if massive_api_key:
     market_params = {
         "command": "uvx",
-        "args": ["--from", "git+https://github.com/massive-com/mcp_massive@v0.10.0", "mcp_massive"],
+        "args": ["--with", "mcp<2", "--from", "git+https://github.com/massive-com/mcp_massive@v0.10.0", "mcp_massive"],
         "env": {"MASSIVE_API_KEY": massive_api_key},
     }
 else:
@@ -39,8 +39,10 @@ def researcher_mcp_servers(name: str) -> list[MCPServerStdio]:
     Tavily's server offers several tools; we restrict it to web search so the
     researcher reaches for plain search rather than its heavier crawl or deep-research tools.
     """
+    # uvx pulls mcp 2.x by default; mcp-server-fetch still expects mcp 1.x (McpError import).
+    # Use the project venv via uv run — same fix as 1_lab1.ipynb.
     fetch = MCPServerStdio(
-        {"command": "uvx", "args": ["mcp-server-fetch"]},
+        {"command": "uv", "args": ["run", "mcp-server-fetch"], "cwd": PROJECT_DIR},
         client_session_timeout_seconds=TIMEOUT,
     )
     search = MCPServerStdio(
