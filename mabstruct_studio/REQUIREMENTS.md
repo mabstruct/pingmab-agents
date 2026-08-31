@@ -1,7 +1,8 @@
 # MABSTRUCT Studio — Requirements & Architecture Decisions
 
-Status: **draft**, opened 2026-08-31. Living document — requirements below the line are
-agreed intent; architecture decisions are proposals until marked ACCEPTED.
+Status: **decisions settled 2026-08-31**, opened the same day. Living document —
+requirements below the line are agreed intent; architecture decisions are proposals until
+marked ACCEPTED. AD1–AD7 are ACCEPTED and Q1–Q5 are resolved; see *Decisions log*.
 
 ## Context
 
@@ -25,6 +26,17 @@ but wraps it in persistence, a human decision point, and a feedback loop — so 
 gets better at making games over time instead of restarting each session.
 
 The notebook remains the reference implementation and the place to spike new phases.
+
+### This is a learning project
+
+Stated plainly because it governs every decision below: MABSTRUCT Studio exists to learn the
+multi-agent pipeline, not to operate a game studio. Where a decision offers a simple option
+and a thorough one, the simple one wins and the rough edge is named rather than engineered
+away. Deferring a requirement outright is a legitimate answer here.
+
+Decisions already taken on that basis — deliberate, not gaps awaiting a fix: ranking on a
+single human rating rather than a composite (R7/Q1), deferring cross-game learnings entirely
+(R5/Q2), and living with opaque deployed-game URLs (AD5).
 
 ---
 
@@ -50,32 +62,44 @@ Each idea carries an explicit status: `ideated → designed → developed → de
 terminal/exceptional states (e.g. `rejected`, `failed`). Status is queryable and drives
 what the UI offers for that idea.
 
-*Open:* is status a single enum, or one timestamp per stage? A stage-timestamp model
-also answers "how long does design take" and survives re-runs better. **Leaning: per-stage
-records, with status derived.**
+**RESOLVED 2026-08-31 — per-stage records, status derived.** Each stage writes its own row;
+status is the newest stage that has one. Re-runs append rather than clobber, stage timings
+come for free, and the rows have to exist anyway: R7 needs several builds per idea and R4
+needs feedback per build. A single enum column had nowhere to put build #2.
 
 ### R4 — Feedback loop after deploy [d]
 
 After a game is deployed, a human can submit feedback against that specific build. That
 feedback can be fed back into the pipeline to produce a refurbished version of the game.
 
-*Open:* does refurbishment re-enter at DESIGN (rework the brief) or at DEVELOP (patch the
-build)? These produce different artifacts and different lineage. **Leaning: both, as
-distinct actions the human picks.**
+**RESOLVED 2026-08-31 — both, but DEVELOP-patch ships first.** "The controls feel floaty"
+re-enters at DEVELOP: same design, new build. "The concept is wrong" re-enters at DESIGN:
+new design, new build. The human picks. DEVELOP-patch is the common case and much cheaper,
+so it is built first; the DESIGN loop follows when a real case demands it.
+
+*Consequence:* `builds` carries a self-reference (`refurb_of`) and a `refurb_entry` of
+`design` | `develop`, so lineage is answerable per build.
 
 ### R5 — Learnings persist across games [e]
 
 Lessons from every game development accumulate, so later games are produced better and
 faster. This is the requirement that makes the studio compound rather than repeat.
 
-*Open — the biggest one.* Mechanism is undecided. Candidates:
+**DEFERRED 2026-08-31.** Ship R1–R4 and R6–R7 first; revisit R5 once several titles have
+shipped and there is a real history to learn from. Nothing is appended to phase prompts yet,
+and the studio does not compound until this is built — that is accepted for now.
+
+The Store layer in AD1 stays in the design so this has somewhere to land. Candidates, kept
+for the revisit:
 1. **Curated rules** appended to phase prompts (explicit, reviewable, manual to maintain).
 2. **Few-shot exemplars** — feed the current best games as reference implementations.
 3. **Retrieved learnings** — a Store with semantic search, queried at DESIGN/DEVELOP time.
 
-These are not exclusive. (1) is cheapest and should probably come first; (3) is the
-LangGraph-native answer and the most speculative. Do not build (3) before there is enough
-history to retrieve from.
+These are not exclusive. (1) is cheapest; (3) is the LangGraph-native answer and the most
+speculative. Do not build (3) before there is enough history to retrieve from. A fourth
+option surfaced in the interview and is worth weighing then: a **retrospective node** that
+drafts candidate learnings after each game for a human to approve into (1) — the argument
+being that a hand-maintained rule list is the thing that reliably rots.
 
 ### R6 — Ideas grouped by game title [f]
 
@@ -87,18 +111,26 @@ belong to that title, across runs and across time.
 Where several ideas exist for one title, they are ranked. The top-ranked build is the
 **production candidate** — always exactly one per title.
 
-*Open — must be answered before this can be built.* What defines "best"? The ranking
-signal is undecided:
+**RESOLVED 2026-08-31 — rank on human rating (1–5) from R4 feedback, and nothing else.**
+One honest signal beats a composite whose weights were invented on zero data. Sparse and
+subjective is accepted: an unrated build simply has no rank.
+
+*Production-candidate fallback.* R7 wants exactly one candidate per title, but an unrated
+title has no ranked build. The candidate is the highest-rated build for that title; with no
+ratings at all, it falls back to the **newest deployed build that passed Tier-0**, so a
+title always has one.
+
+Other signals were considered and rejected *as the ranking score* — note that Tier-0 is
+still recorded and still gates deploys, it just does not rank:
 
 | Candidate signal | Cheap? | Honest? |
 | --- | --- | --- |
-| Human rating from R4 feedback | yes | yes, but sparse and subjective |
+| Human rating from R4 feedback | yes | yes, but sparse and subjective — **chosen** |
 | Tier-0 / Tier-1 automated validation | yes | measures "not broken", not "good" |
 | Playtest telemetry (session length, retries) | needs instrumentation in the game | strongest signal, most work |
 | LLM-as-judge on the built game | moderate | unproven for playability |
 
-Ranking almost certainly needs a composite. **This requirement is blocked on defining the
-score, not on building the table.**
+Revisit once there are enough ratings that a composite could be fitted rather than guessed.
 
 ---
 
@@ -107,7 +139,7 @@ score, not on building the table.**
 Proposals with rationale. Alternatives are recorded because the reasoning matters more
 than the conclusion — revisit these when an assumption changes.
 
-### AD1 — Three persistence layers, kept separate — PROPOSED
+### AD1 — Three persistence layers, kept separate — ACCEPTED 2026-08-31
 
 The pipeline needs three different kinds of memory, and conflating them is the main risk
 in this design.
@@ -115,7 +147,7 @@ in this design.
 | Layer | Technology | Holds | Serves |
 | --- | --- | --- | --- |
 | Checkpointer | `SqliteSaver` (Postgres later) | graph state snapshots per thread | R2 |
-| **Domain DB** | own relational schema | titles, ideas, designs, builds, deployments, feedback, scores | R1, R3, R4, R6, R7 |
+| **Domain DB** | SQLite + SQLModel (Postgres later) | titles, ideas, designs, builds, deployments, feedback, ratings | R1, R3, R4, R6, R7 |
 | Store | LangGraph Store (KV, optional vectors) | cross-run learnings | R5 |
 
 **Rationale.** LangGraph's own docs draw this line: checkpointers persist a *thread's*
@@ -128,11 +160,18 @@ was never indexed for it.
 **Consequence.** The domain schema — not the graph — becomes the durable asset. The
 notebook's `memory.db` stays disposable; the domain DB does not.
 
+**Technology (decided 2026-08-31): SQLite + SQLModel.** SQLite is the right size for a
+single-operator studio on one machine, and an ORM keeps "Postgres later" a URL change plus a
+migration rather than a rewrite. SQLModel specifically because it is Pydantic-backed, and the
+graph already expresses every structured output as a Pydantic model — one idiom, not two.
+Raw SQL was considered and rejected: the hand-written migrations cost more than the ranking
+queries save.
+
 **Alternative rejected:** single SQLite file used as checkpointer *and* idea repository.
 Cheaper on day one, but R7's ranking and R3's status queries have no good implementation
 over checkpoint rows.
 
-### AD2 — Keep LangGraph as the pipeline engine — PROPOSED
+### AD2 — Keep LangGraph as the pipeline engine — ACCEPTED 2026-08-31
 
 No change of engine. The phase nodes, prompts, structured outputs, and the chunked
 HTML-writing tool contract port from the notebook as-is.
@@ -142,7 +181,7 @@ config, streaming at high `max_tokens`, retry middleware, the `start → js × N
 protocol, Tier-0 validation. That is all LangGraph/LangChain-shaped and should not be
 rewritten to move house.
 
-### AD3 — FastAPI service in front of the graph — PROPOSED
+### AD3 — FastAPI service in front of the graph — ACCEPTED 2026-08-31
 
 The pipeline runs behind an HTTP API rather than in the UI process.
 
@@ -158,11 +197,39 @@ It also decouples AD4 — the frontend becomes swappable behind a stable contrac
 **Alternative rejected:** UI calls the graph in-process. Simpler, but couples run lifetime
 to session lifetime and makes AD4 irreversible.
 
-*Open:* self-hosted FastAPI vs LangGraph Platform's own server (which supplies persistence,
-runs, and streaming out of the box). Worth an explicit evaluation before writing endpoints
-by hand — the studio's needs may be close to what it already provides.
+**Q5 RESOLVED 2026-08-31 — self-hosted FastAPI, written so it can be mounted.**
 
-### AD4 — TypeScript + Vite frontend — PROPOSED
+*The first rationale was wrong and is corrected here.* It claimed the platform could not host
+AD1's domain model, so running it would mean running a second service for the leaderboard,
+status and feedback queries. It would not. A docs check on 2026-08-31 found that
+`langgraph.json` takes an **`http.app`** key — an import path to a custom Starlette or FastAPI
+application (`path/to/module.py:app_var`) that is mounted to extend or override the server's
+default routes. `auth.path` and `encryption.path` hook custom auth and encryption the same
+way. The domain API can live *inside* the LangGraph server.
+
+**What actually decides it, then:**
+- **No license question.** Deployment beyond Cloud comes as hybrid, standalone server, or
+  self-hosted with a control plane; the licensing terms for self-hosted standalone were not
+  established. Self-hosting FastAPI has no such unknown.
+- **No LangSmith dependency in the runtime path.** The local LangGraph server requires a
+  LangSmith API key (free). Tracing already uses one here, but a key that gates *tracing* is
+  a different risk from a key that gates *the studio running at all*.
+- **We own the process lifecycle** — migrations, startup, background runs — rather than
+  fitting into theirs.
+
+**The cost is real:** the run queue, streamed progress and HIL resume plumbing get written by
+hand, and the platform supplies all of it.
+
+**Consequence — keep the API mountable.** Because `http.app` takes a FastAPI app, the same
+code can run standalone *or* inside the LangGraph server. Keep the domain API free of
+assumptions about owning the process — DB session and startup as dependencies and a lifespan
+handler, no work in `main` — and Q5 degrades from a decision into a deployment-time switch.
+
+*Still worth checking* if the hand-written run lifecycle turns out to be a slog: the
+licensing terms for a self-hosted standalone server. That is the one fact that would reopen
+this. `langgraph dev` and Studio stay useful as debugging aids while porting, either way.
+
+### AD4 — TypeScript + Vite frontend — ACCEPTED 2026-08-31
 
 **Rationale.** The requirement set is app-shaped, not form-shaped: a leaderboard (R7),
 status-filtered idea browsing (R3, R6), an embedded playable build, a feedback form (R4),
@@ -178,7 +245,7 @@ where it would be rewritten anyway.
 **Consequence.** Two languages in the project. Accepted deliberately: AD3 makes the
 boundary explicit, and the API contract is the thing worth getting right.
 
-### AD5 — Deployment identity is owned by the domain DB — PROPOSED
+### AD5 — Deployment identity is owned by the domain DB — ACCEPTED 2026-08-31
 
 The here.now slug for a build is recorded in the domain DB, not in a file inside the build
 output directory.
@@ -188,32 +255,161 @@ build folder copies its slug, so distinct games silently claim one URL and overw
 other — this happened, and three builds ended up pointing at one site. Identity must live
 where it cannot be duplicated by a filesystem copy.
 
-*Depends on:* the open question of what owns a stable playtest URL — the title, the idea,
-or an explicit build label. Deferred to the deploy review session (see below).
+**Q4 RESOLVED 2026-08-31 — the build owns the URL, plus one title-level alias.** Every build
+publishes to its own site and nothing ever overwrites: R4 feedback names a build that stays
+playable, and R7 can compare competing ideas side by side. One extra site per title serves
+the production candidate for sharing.
+
+*Cost, accepted:* one here.now site per build, so site count grows with every refurb.
+
+**The title alias is DEFERRED to an owned subdomain (decided 2026-08-31).** here.now does not
+let a caller choose a slug, so an alias can never be a chosen hostname like
+`big-swallow.here.now`. Rather than re-publishing candidate bytes into a stand-in site, the
+plan is:
+
+1. Publish one here.now site whose `index.html` is a **start page** — a stable, referenced
+   entry point that links out to the per-build slugs.
+2. Point an **owned subdomain** at that site.
+
+That gives one solid permanent URL — the **mabgames index** — without the alias having to
+impersonate a build. Deferred until the application itself is running; nothing in the schema
+depends on it, since `deploys.slug` already maps every build to its own site. The start page
+becomes a consumer of the domain DB (it lists production candidates), not a publishing trick.
+
+**Accepted rough edge: the games themselves keep curious URLs.** The subdomain fixes the
+*entry point*, not the destinations — every game still lives at an opaque random slug like
+`hazy-hazel-6pws`, and a player who bookmarks one has a meaningless address. That is
+deliberate and not a gap to close: this is a learning project, and prettifying per-game URLs
+buys nothing it would teach. The index page is what people are given; the slugs are what the
+index links to.
 
 ---
 
-## Open questions blocking work
+### AD6 — Project structure: `backend/` + `frontend/`, package `mabgames` — ACCEPTED 2026-08-31
 
-| # | Question | Blocks |
-| --- | --- | --- |
-| Q1 | What score defines the "best" game? | R7 |
-| Q2 | What mechanism carries learnings forward? | R5 |
-| Q3 | Does refurbishment re-enter at DESIGN or DEVELOP? | R4 |
-| Q4 | What owns a stable playtest URL — title, idea, or build label? | AD5 |
-| Q5 | Self-hosted FastAPI or LangGraph Platform server? | AD3 |
+The application lives beside the notebooks, split by the boundary AD3 already draws.
+
+```
+mabstruct_studio/
+├── mabstruct_studio.ipynb          # spike environment — stays at root
+├── mabstruct_experimenting.ipynb
+├── dev-output/                     # gitignored notebook output
+├── backend/
+│   ├── pyproject.toml              # see AD7
+│   ├── src/mabgames/
+│   │   ├── domain/                 # AD1 — schema, models, repository
+│   │   ├── graph/                  # AD2 — phases ported from the notebook
+│   │   │   ├── state.py  prompts.py  models.py
+│   │   │   ├── ideation.py  design.py  develop.py  deploy.py
+│   │   │   └── tools/              # write_game_html_part, here.now publish
+│   │   ├── api/                    # AD3 — routes, run lifecycle
+│   │   └── config.py               # env, keys, paths
+│   └── tests/
+└── frontend/                       # AD4 — TS + Vite
+    ├── package.json
+    └── src/
+```
+
+**Rationale.**
+
+- **Plain directory names, no prefix.** `mabstruct_studio/` already namespaces them, and the
+  repo precedent next door is `6_mcp/backend` + `6_mcp/frontend`. A `mabgames_*` directory
+  prefix would also introduce a second brand for one project — everything else here says
+  *mabstruct* (both notebooks, `MABSTRUCT_GAMESTUDIO_BACKGROUNDER`, the commit convention
+  `type(mabstruct):`, both documents).
+- **`mabgames` is the importable package**, which is where that name reads well:
+  `from mabgames.domain import Idea`, not `from mabgames_backend.domain import Idea` — the
+  layer is not worth repeating in every import line.
+- **`domain/` is a sibling of `graph/`, not nested inside it.** AD1's whole argument is that
+  the domain schema outlives the pipeline; nesting it under the graph would quietly undo that.
+- **Tests live with their runner, not in one top-level `tests/`.** Two languages means two
+  runners: pytest under `backend/tests/`, Vitest with the frontend. An `e2e/` directory gets
+  added when there is an actual cross-stack test to put in it — not before.
+
+*Depends on:* Q5. If LangGraph Platform's server wins, `api/` shrinks to whatever the
+platform does not already supply, and may disappear.
+
+**Alternative rejected:** `mabgames_backend/` + `mabgames_frontend/` with a top-level
+`tests/`. Rejected on the redundant prefix, the second brand name, and the split-runner
+problem above.
+
+### AD7 — Backend is a uv workspace member — ACCEPTED 2026-08-31
+
+`backend/pyproject.toml` declares the `mabgames` package and its own dependencies; the
+parent repo gains `[tool.uv.workspace]` with `mabstruct_studio/backend` as a member.
+
+**Rationale.** The application's dependency list stops being tangled with a course repo's.
+One resolved lockfile and one shared `.venv` at the repo root still serve both, so the
+notebooks keep working unchanged and there is still no venv inside `mabstruct_studio/`.
+
+**Consequence.** Backend dependencies are added with `uv add <pkg>` from `backend/`, not from
+the parent. The parent repo remains the place to add anything the notebooks need.
+
+## Domain schema (sketch)
+
+Falls out of R3, R4, R6, R7 and Q4 above. Indicative, not final — the shape is settled, the
+columns are not.
+
+```
+titles     (id, title, created_at)
+ideas      (id, title_id, sub_title, genre, style, reason,
+            description, features, created_at, rejected_at)
+designs    (id, idea_id, brief, created_at)
+builds     (id, idea_id, design_id, html_path, tier0_pass, summary,
+            refurb_of, refurb_entry, created_at)
+deploys    (id, build_id, slug, site_url, created_at)
+feedback   (id, build_id, rating, comment, created_at)
+candidates (title_id, build_id, updated_at)
+```
+
+- `titles` is R6's grouping key; every idea for "The Big Swallow" hangs off one row.
+- Status (R3) is **not a column** — it is the newest stage row that exists for an idea.
+- `builds.refurb_of` + `refurb_entry` (`design` | `develop`) carry R4's lineage.
+- `deploys.slug` is Q4/AD5's answer: slug identity lives here, never in a file inside the
+  build directory that a copy could duplicate.
+- `feedback.rating` (1–5) is the only ranking signal (R7/Q1). `candidates` holds the one
+  production candidate per title.
+
+## Decisions log
+
+Every question that was blocking work is now answered. Resolved 2026-08-31 unless noted.
+
+| # | Question | Resolution | Lands in |
+| --- | --- | --- | --- |
+| Q1 | What score defines the "best" game? | Human rating 1–5 only; candidate falls back to newest Tier-0-passing deploy | R7 |
+| Q2 | What mechanism carries learnings forward? | **Deferred** until several titles have shipped | R5 |
+| Q3 | Does refurbishment re-enter at DESIGN or DEVELOP? | Both; DEVELOP-patch built first | R4 |
+| Q4 | What owns a stable playtest URL? | The build. Title alias deferred to an owned subdomain over a here.now start page | AD5 |
+| Q5 | Self-hosted FastAPI or LangGraph Platform server? | Self-hosted FastAPI, written mountable via `http.app`. Docs checked 2026-08-31; first rationale corrected | AD3 |
+| — | Status: enum or per-stage records? | Per-stage records, status derived | R3 |
+| — | What technology backs the domain DB? | SQLite + SQLModel | AD1 |
+| — | Project structure and package naming | `backend/` + `frontend/`, package `mabgames` | AD6 |
+| — | Backend dependency management | uv workspace member with its own pyproject | AD7 |
+
+**Nothing blocks implementation.** Three things to carry forward rather than forget: keep the
+domain API mountable so Q5 stays reversible, stand up the owned-subdomain start page once the
+app runs, and revisit R5 once there is history.
 
 ## Parked
 
 - **Deploy-phase review session.** Slug identity (Q4), the three colliding registries in
   `dev-output/`, and the stale build currently live at `hazy-hazel-6pws`. Deliberately
   deferred — see the session recap of 2026-08-31.
-- **here.now version history** requires a paid plan, so overwrites are not restorable.
-  Relevant input to Q4.
-- **CLAUDE.md is stale** on state fields, cell numbers, and the deployment phase.
+- **here.now version history** requires a paid plan, so overwrites are not restorable. This
+  was an input to Q4, and build-level URLs answer it: nothing overwrites, so nothing needs
+  restoring.
+- **R5's learnings mechanism** (Q2), deferred until several titles have shipped.
+- **Owned-subdomain start page** (the Q4 title alias), deferred until the application runs.
+- **Licensing for a self-hosted standalone LangGraph Platform server** — unestablished, and
+  the one fact that would reopen Q5.
+- **Composite ranking** (Q1), revisit once enough ratings exist to fit weights rather than
+  guess them.
 
 ## Notes
 
+- **`CLAUDE.md` names this document as the project's authoritative spec.** Keep the two in
+  step: when a decision here becomes ACCEPTED or an open question is answered, say so here
+  in the same commit as the code that acts on it.
 - The notebook stays the spike environment. Port *from* it into the app; do not fork it.
 - `mabstruct_experimenting.ipynb` still holds the parallel `Send` fan-out and the Tier-1
   smoke test — both become relevant again once the app runs multiple ideas per title (R7).
